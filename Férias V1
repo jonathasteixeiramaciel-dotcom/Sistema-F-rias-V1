@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Férias Inteligente PME</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/dayjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/plugin/relativeTime.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/locale/pt-br.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="antialiased text-slate-700">
+    <div class="min-h-screen container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Cabeçalho -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-800">Gestor de Férias Inteligente</h1>
+            <p class="text-slate-500 mt-1">Seu painel de controle para decisões de férias estratégicas.</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Coluna Principal (Solicitações e Alertas) -->
+            <div class="lg:col-span-2 space-y-8">
+                
+                <!-- Painel de Riscos e Alertas -->
+                <section>
+                    <h2 class="text-xl font-semibold text-slate-800 mb-4">Painel de Riscos e Alertas</h2>
+                    <div id="risk-alerts" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Alertas serão injetados aqui -->
+                    </div>
+                </section>
+                
+                <!-- Solicitações Pendentes -->
+                <section>
+                    <h2 class="text-xl font-semibold text-slate-800 mb-4">Solicitações de Férias Pendentes</h2>
+                    <div id="pending-requests" class="space-y-4">
+                        <!-- Cards de solicitação serão injetados aqui -->
+                        <div id="no-pending-requests" class="hidden text-center py-10 px-6 bg-white rounded-lg shadow-sm">
+                            <svg class="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <h3 class="mt-2 text-sm font-medium text-slate-900">Tudo em ordem!</h3>
+                            <p class="mt-1 text-sm text-slate-500">Não há solicitações de férias pendentes.</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Coluna Lateral (Relatórios) -->
+            <div class="lg:col-span-1 space-y-8">
+                
+                <!-- Impacto Financeiro Provisionado -->
+                <section>
+                    <h2 class="text-xl font-semibold text-slate-800 mb-4">Provisão Financeira Mensal</h2>
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <div class="flex justify-between items-center mb-2">
+                           <span class="text-sm font-medium text-slate-500">Orçamento Mensal de Férias</span>
+                           <span id="monthly-budget-display" class="font-bold text-slate-800"></span>
+                        </div>
+                        <div id="financial-provision" class="space-y-3">
+                           <!-- Provisões mensais serão injetadas aqui -->
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Calendário de Férias -->
+                <section>
+                    <h2 class="text-xl font-semibold text-slate-800 mb-4">Calendário da Equipe</h2>
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <button id="prev-month" class="p-2 rounded-full hover:bg-slate-100">&lt;</button>
+                            <h3 id="calendar-month-year" class="font-semibold text-lg"></h3>
+                            <button id="next-month" class="p-2 rounded-full hover:bg-slate-100">&gt;</button>
+                        </div>
+                        <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-sm">
+                            <!-- Calendário será injetado aqui -->
+                        </div>
+                    </div>
+                </section>
+
+                 <!-- Simulação Rápida -->
+                <section>
+                    <h2 class="text-xl font-semibold text-slate-800 mb-4">Simulação Rápida</h2>
+                     <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <p class="text-sm text-slate-600 mb-4">Selecione funcionários para simular o impacto financeiro de suas férias em um único mês.</p>
+                        <select id="simulation-employee-select" multiple class="w-full border-slate-300 rounded-md shadow-sm mb-4 h-32 custom-scrollbar">
+                           <!-- Opções de funcionários aqui -->
+                        </select>
+                        <select id="simulation-month-select" class="w-full border-slate-300 rounded-md shadow-sm mb-4">
+                            <!-- Opções de meses aqui -->
+                        </select>
+                        <button id="run-simulation-btn" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 transition">
+                            Simular Impacto
+                        </button>
+                        <div id="simulation-result" class="mt-4 text-center"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        dayjs.extend(dayjs_plugin_relativeTime);
+        dayjs.locale('pt-br');
+
+        // --- BANCO DE DADOS SIMULADO ---
+        const companySettings = {
+            monthlyBudget: 10000.00,
+            criticalAlertDays: 90, // Alerta crítico quando faltam 90 dias ou menos
+        };
+
+        let employees = [
+            { id: 1, name: 'Ana Silva', hireDate: '2023-08-15', salary: 4500, role: 'Vendas', isEssential: true },
+            { id: 2, name: 'Bruno Costa', hireDate: '2024-02-01', salary: 3800, role: 'Suporte', isEssential: false },
+            { id: 3, name: 'Carla Dias', hireDate: '2023-11-10', salary: 6000, role: 'Desenvolvimento', isEssential: true },
+            { id: 4, name: 'Daniel Martins', hireDate: '2025-01-20', salary: 5200, role: 'Desenvolvimento', isEssential: true },
+            { id: 5, name: 'Elena Souza', hireDate: '2023-05-05', salary: 7000, role: 'Gerente de Projetos', isEssential: true },
+            { id: 6, name: 'Fábio Rocha', hireDate: '2024-09-01', salary: 3500, role: 'Marketing', isEssential: false },
+        ];
+
+        let vacationRequests = [
+            {
+                id: 1,
+                employeeId: 3, // Carla Dias
+                status: 'pending',
+                options: [
+                    { id: 'A', startDate: '2025-11-03', endDate: '2025-12-02' },
+                    { id: 'B', startDate: '2026-01-05', endDate: '2026-02-03' },
+                    { id: 'C', startDate: '2026-02-02', endDate: '2026-03-03' }
+                ],
+                submissionDate: '2025-08-29'
+            },
+            {
+                id: 2,
+                employeeId: 1, // Ana Silva
+                status: 'pending',
+                options: [
+                    { id: 'A', startDate: '2025-10-06', endDate: '2025-11-04' },
+                    { id: 'B', startDate: '2025-11-03', endDate: '2025-12-02' },
+                ],
+                submissionDate: '2025-08-25'
+            },
+        ];
+
+        let approvedVacations = [
+            { id: 101, employeeId: 5, startDate: '2025-09-01', endDate: '2025-09-30' }
+        ];
+
+        // --- LÓGICA DE NEGÓCIO (CLT, FINANCEIRO, OPERACIONAL) ---
+
+        const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+        const formatDate = (date) => dayjs(date).format('DD/MM/YYYY');
+
+        // Funções da CLT
+        const clt = {
+            getAcquisitivePeriodEnd: (hireDate) => dayjs(hireDate).add(12, 'month').subtract(1, 'day'),
+            getConcessivePeriodEnd: (hireDate) => dayjs(hireDate).add(24, 'month').subtract(1, 'day'),
+            isEligible: (hireDate) => dayjs().isAfter(clt.getAcquisitivePeriodEnd(hireDate)),
+            daysUntilConcessiveEnd: (hireDate) => {
+                const concessiveEnd = clt.getConcessivePeriodEnd(hireDate);
+                return concessiveEnd.diff(dayjs(), 'day');
+            }
+        };
+
+        // Funções Financeiras
+        const finance = {
+            calculateVacationCost: (salary) => salary + (salary / 3),
+            getMonthlyImpact: (month, year) => {
+                 const approvedCost = approvedVacations
+                    .filter(v => dayjs(v.startDate).month() === month && dayjs(v.startDate).year() === year)
+                    .reduce((acc, v) => {
+                        const employee = employees.find(e => e.id === v.employeeId);
+                        return acc + finance.calculateVacationCost(employee.salary);
+                    }, 0);
+                return approvedCost;
+            }
+        };
+
+        // Funções Operacionais
+        const operations = {
+            checkCriticalOverlap: (startDate, endDate, employeeId) => {
+                const start = dayjs(startDate);
+                const end = dayjs(endDate);
+                const employee = employees.find(e => e.id === employeeId);
+                if (!employee.isEssential) return false;
+
+                return approvedVacations.some(v => {
+                    const otherEmployee = employees.find(e => e.id === v.employeeId);
+                    if (!otherEmployee.isEssential || otherEmployee.id === employee.id) return false;
+                    
+                    const vStart = dayjs(v.startDate);
+                    const vEnd = dayjs(v.endDate);
+
+                    return (start.isBefore(vEnd) && end.isAfter(vStart));
+                });
+            }
+        };
+
+        // Motor de Recomendação
+        const recommendationEngine = (requestOption, employeeId) => {
+            const employee = employees.find(e => e.id === employeeId);
+            const recommendation = {
+                compliance: { status: 'ok', message: '' },
+                operational: { status: 'ok', message: '' },
+                financial: { status: 'ok', message: '' },
+                final: 'ideal', // ideal, good, warning, critical
+            };
+
+            // 1. Análise de Conformidade (CLT)
+            const daysLeft = clt.daysUntilConcessiveEnd(employee.hireDate);
+            if (daysLeft < 0) {
+                 recommendation.compliance = { status: 'critical', message: 'Férias VENCIDAS! Pagamento em dobro.' };
+            } else if (daysLeft <= companySettings.criticalAlertDays) {
+                 recommendation.compliance = { status: 'warning', message: `Vencimento em ${daysLeft} dias. Priorizar.` };
+            } else {
+                 recommendation.compliance = { status: 'ok', message: `Vence em ${daysLeft} dias.` };
+            }
+
+            // 2. Análise Operacional
+            const hasOverlap = operations.checkCriticalOverlap(requestOption.startDate, requestOption.endDate, employeeId);
+            if (hasOverlap) {
+                recommendation.operational = { status: 'critical', message: 'Sobreposição com outra função essencial.' };
+            } else {
+                recommendation.operational = { status: 'ok', message: 'Sem sobreposição crítica.' };
+            }
+            
+            // 3. Análise Financeira
+            const cost = finance.calculateVacationCost(employee.salary);
+            const month = dayjs(requestOption.startDate).month();
+            const year = dayjs(requestOption.startDate).year();
+            const currentMonthImpact = finance.getMonthlyImpact(month, year);
+            const totalImpact = currentMonthImpact + cost;
+
+            if (totalImpact > companySettings.monthlyBudget) {
+                 recommendation.financial = { status: 'warning', message: `Excede orçamento do mês em ${formatCurrency(totalImpact - companySettings.monthlyBudget)}.` };
+            } else {
+                 const budgetUsage = (totalImpact / companySettings.monthlyBudget) * 100;
+                 recommendation.financial = { status: 'ok', message: `Compromete ${budgetUsage.toFixed(0)}% do orçamento.` };
+            }
+
+            // Definir recomendação final
+            const statuses = [recommendation.compliance.status, recommendation.operational.status, recommendation.financial.status];
+            if(statuses.includes('critical')) recommendation.final = 'critical';
+            else if(statuses.includes('warning')) recommendation.final = 'warning';
+            else recommendation.final = 'ideal';
+
+            return recommendation;
+        };
+
+        // --- RENDERIZAÇÃO DA UI ---
+
+        const getRecommendationTag = (level) => {
+            switch(level) {
+                case 'ideal': return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Ideal ⭐</span>`;
+                case 'warning': return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Aceitável ⚠️</span>`;
+                case 'critical': return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Não Recomendado ❌</span>`;
+                default: return '';
+            }
+        };
+
+        const getStatusIcon = (status) => {
+             switch(status) {
+                case 'ok': return `<svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+                case 'warning': return `<svg class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+                case 'critical': return `<svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+            }
+        };
+        
+        function renderPendingRequests() {
+            const container = document.getElementById('pending-requests');
+            const noRequestsEl = document.getElementById('no-pending-requests');
+            const pending = vacationRequests.filter(r => r.status === 'pending');
+
+            if (pending.length === 0) {
+                noRequestsEl.classList.remove('hidden');
+                container.innerHTML = '';
+                return;
+            }
+
+            noRequestsEl.classList.add('hidden');
+            container.innerHTML = pending.map(request => {
+                const employee = employees.find(e => e.id === request.employeeId);
+                const requestCost = finance.calculateVacationCost(employee.salary);
+
+                return `
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden" data-request-id="${request.id}">
+                    <div class="p-4 sm:p-6 border-b border-slate-200">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="text-lg font-semibold text-slate-900">${employee.name}</h3>
+                                <p class="text-sm text-slate-500">${employee.role} | Custo: ${formatCurrency(requestCost)}</p>
+                            </div>
+                            <span class="text-xs text-slate-400">Enviado ${dayjs(request.submissionDate).fromNow()}</span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50/50">
+                        ${request.options.map(option => {
+                            const recommendation = recommendationEngine(option, employee.id);
+                            return `
+                            <div class="p-4 sm:p-6 border-b border-slate-200 last:border-b-0">
+                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="mb-4 sm:mb-0">
+                                        <div class="flex items-center">
+                                            <span class="font-semibold text-slate-800">${formatDate(option.startDate)} a ${formatDate(option.endDate)}</span>
+                                            <div class="ml-3">${getRecommendationTag(recommendation.final)}</div>
+                                        </div>
+                                        <div class="mt-2 space-y-1 text-sm text-slate-600">
+                                            <p class="flex items-center">${getStatusIcon(recommendation.compliance.status)}<span class="ml-2">${recommendation.compliance.message}</span></p>
+                                            <p class="flex items-center">${getStatusIcon(recommendation.operational.status)}<span class="ml-2">${recommendation.operational.message}</span></p>
+                                            <p class="flex items-center">${getStatusIcon(recommendation.financial.status)}<span class="ml-2">${recommendation.financial.message}</span></p>
+                                        </div>
+                                    </div>
+                                    <div class="flex-shrink-0 flex space-x-2">
+                                        <button class="approve-btn text-sm font-semibold bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition" data-option-start="${option.startDate}" data-option-end="${option.endDate}">Aprovar</button>
+                                        <button class="reject-btn text-sm font-semibold bg-slate-200 text-slate-700 py-2 px-4 rounded-md hover:bg-slate-300 transition">Rejeitar</button>
+                                    </div>
+                                </div>
+                            </div>
+                            `
+                        }).join('')}
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function renderRiskAlerts() {
+            const container = document.getElementById('risk-alerts');
+            container.innerHTML = '';
+            
+            // Alerta de Férias Vencendo
+            const expiringVacations = employees
+                .filter(e => clt.isEligible(e.hireDate))
+                .map(e => ({...e, daysLeft: clt.daysUntilConcessiveEnd(e.hireDate)}))
+                .filter(e => e.daysLeft <= companySettings.criticalAlertDays)
+                .sort((a,b) => a.daysLeft - b.daysLeft);
+
+            if (expiringVacations.length > 0) {
+                 const employee = expiringVacations[0];
+                 const alertColor = employee.daysLeft < 30 ? 'red' : 'yellow';
+                 const alertHtml = `
+                    <div class="bg-white p-4 rounded-lg shadow-sm flex items-start">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-${alertColor}-100 flex items-center justify-center">
+                            <svg class="h-6 w-6 text-${alertColor}-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <div class="ml-4">
+                            <h4 class="font-semibold text-slate-800">Férias a Vencer</h4>
+                            <p class="text-sm text-slate-600">
+                                ${employee.name} precisa tirar férias em <strong>${employee.daysLeft} dias</strong>.
+                                ${expiringVacations.length > 1 ? ` (+${expiringVacations.length - 1} outros)`: ''}
+                            </p>
+                        </div>
+                    </div>
+                 `;
+                 container.insertAdjacentHTML('beforeend', alertHtml);
+            }
+
+            // Alerta de Orçamento
+            const nextMonth = dayjs().add(1, 'month');
+            const nextMonthImpact = finance.getMonthlyImpact(nextMonth.month(), nextMonth.year());
+            if (nextMonthImpact > companySettings.monthlyBudget) {
+                 const alertHtml = `
+                    <div class="bg-white p-4 rounded-lg shadow-sm flex items-start">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                            <svg class="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01"></path></svg>
+                        </div>
+                        <div class="ml-4">
+                            <h4 class="font-semibold text-slate-800">Orçamento Comprometido</h4>
+                            <p class="text-sm text-slate-600">
+                                Orçamento de <strong>${nextMonth.format('MMMM')}</strong> já está 
+                                <strong class="text-red-600">${((nextMonthImpact / companySettings.monthlyBudget) * 100).toFixed(0)}%</strong> utilizado.
+                            </p>
+                        </div>
+                    </div>
+                 `;
+                 container.insertAdjacentHTML('beforeend', alertHtml);
+            }
+
+            if(container.innerHTML === '') {
+                container.innerHTML = `<div class="md:col-span-2 bg-white p-4 rounded-lg shadow-sm text-center text-slate-500">Nenhum risco iminente detectado. Bom trabalho!</div>`;
+            }
+        }
+
+        function renderFinancialProvision() {
+            const container = document.getElementById('financial-provision');
+            document.getElementById('monthly-budget-display').textContent = formatCurrency(companySettings.monthlyBudget);
+            container.innerHTML = '';
+            
+            for(let i=0; i < 6; i++) {
+                const monthDate = dayjs().add(i, 'month');
+                const month = monthDate.month();
+                const year = monthDate.year();
+                const impact = finance.getMonthlyImpact(month, year);
+                const percentage = (impact / companySettings.monthlyBudget) * 100;
+                
+                const progressBarColor = percentage > 90 ? 'bg-red-500' : percentage > 60 ? 'bg-yellow-500' : 'bg-green-500';
+
+                container.innerHTML += `
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="font-medium text-slate-800 capitalize">${monthDate.format('MMMM')}</span>
+                            <span class="text-slate-500">${formatCurrency(impact)}</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2">
+                            <div class="${progressBarColor} h-2 rounded-full" style="width: ${Math.min(percentage, 100)}%"></div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        let calendarDate = dayjs();
+        function renderCalendar() {
+            const calendarGrid = document.getElementById('calendar-grid');
+            const monthYearEl = document.getElementById('calendar-month-year');
+            calendarGrid.innerHTML = '';
+
+            monthYearEl.textContent = calendarDate.format('MMMM [de] YYYY');
+            
+            const daysOfWeek = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+            calendarGrid.innerHTML = daysOfWeek.map(day => `<div class="font-bold text-slate-500 text-xs">${day}</div>`).join('');
+            
+            const startOfMonth = calendarDate.startOf('month');
+            const endOfMonth = calendarDate.endOf('month');
+            const daysInMonth = endOfMonth.date();
+            const startDayOfWeek = startOfMonth.day();
+
+            for (let i = 0; i < startDayOfWeek; i++) {
+                calendarGrid.innerHTML += `<div></div>`;
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const currentDate = startOfMonth.date(day);
+                let classes = 'h-8 w-8 flex items-center justify-center rounded-full';
+                let tooltip = '';
+                
+                const vacationsOnDay = approvedVacations.filter(v => currentDate.isAfter(dayjs(v.startDate).subtract(1,'day')) && currentDate.isBefore(dayjs(v.endDate).add(1,'day')) );
+                
+                if (vacationsOnDay.length > 0) {
+                    classes += ' bg-blue-500 text-white cursor-pointer';
+                    const employeeNames = vacationsOnDay.map(v => employees.find(e => e.id === v.employeeId).name).join(', ');
+                    tooltip = `title="${employeeNames} em férias"`;
+                }
+
+                if (currentDate.isSame(dayjs(), 'day')) {
+                    classes += ' bg-indigo-600 text-white';
+                }
+
+                calendarGrid.innerHTML += `<div class="${classes}" ${tooltip}>${day}</div>`;
+            }
+        }
+        
+        function renderSimulationTools() {
+            const employeeSelect = document.getElementById('simulation-employee-select');
+            const monthSelect = document.getElementById('simulation-month-select');
+
+            employeeSelect.innerHTML = employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+            
+            monthSelect.innerHTML = '';
+            for(let i=0; i < 12; i++) {
+                const monthDate = dayjs().add(i, 'month');
+                monthSelect.innerHTML += `<option value="${monthDate.format('YYYY-MM')}">${monthDate.format('MMMM/YYYY')}</option>`;
+            }
+        }
+
+        // --- MANIPULADORES DE EVENTOS ---
+
+        function handleApproval(requestId, startDate, endDate) {
+            const request = vacationRequests.find(r => r.id === requestId);
+            if (!request) return;
+
+            // Mover para aprovadas
+            const newId = Math.max(...approvedVacations.map(v => v.id), 0) + 1;
+            approvedVacations.push({
+                id: newId,
+                employeeId: request.employeeId,
+                startDate: startDate,
+                endDate: endDate
+            });
+
+            // Mudar status da requisição
+            request.status = 'approved';
+            
+            // Re-renderizar tudo
+            renderAll();
+        }
+        
+        function handleRejection(requestId) {
+             const request = vacationRequests.find(r => r.id === requestId);
+             if (!request) return;
+             request.status = 'rejected';
+             renderAll();
+        }
+        
+        function handleSimulation() {
+            const employeeSelect = document.getElementById('simulation-employee-select');
+            const monthSelect = document.getElementById('simulation-month-select');
+            const resultEl = document.getElementById('simulation-result');
+
+            const selectedEmployeeIds = Array.from(employeeSelect.selectedOptions).map(opt => parseInt(opt.value));
+            const [year, month] = monthSelect.value.split('-').map(Number);
+
+            if (selectedEmployeeIds.length === 0) {
+                resultEl.innerHTML = `<p class="text-sm text-red-600">Selecione pelo menos um funcionário.</p>`;
+                return;
+            }
+
+            const existingImpact = finance.getMonthlyImpact(month - 1, year);
+            const simulationImpact = selectedEmployeeIds.reduce((total, id) => {
+                const employee = employees.find(e => e.id === id);
+                return total + finance.calculateVacationCost(employee.salary);
+            }, 0);
+            
+            const totalImpact = existingImpact + simulationImpact;
+            const budgetUsage = (totalImpact / companySettings.monthlyBudget) * 100;
+            const overBudget = totalImpact > companySettings.monthlyBudget;
+            
+            resultEl.innerHTML = `
+                <p class="text-sm text-slate-600">Custo da Simulação: <strong class="text-slate-800">${formatCurrency(simulationImpact)}</strong></p>
+                <p class="text-sm text-slate-600">Impacto Total no Mês: <strong class="${overBudget ? 'text-red-600' : 'text-green-600'}">${formatCurrency(totalImpact)}</strong></p>
+                <p class="text-sm text-slate-600">Uso do Orçamento: <strong class="${overBudget ? 'text-red-600' : 'text-green-600'}">${budgetUsage.toFixed(0)}%</strong></p>
+            `;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Inicialização
+            renderAll();
+            
+            // Event Listeners
+            document.getElementById('pending-requests').addEventListener('click', (e) => {
+                const requestCard = e.target.closest('[data-request-id]');
+                if (!requestCard) return;
+
+                const requestId = parseInt(requestCard.dataset.requestId);
+                
+                if (e.target.classList.contains('approve-btn')) {
+                     const startDate = e.target.dataset.optionStart;
+                     const endDate = e.target.dataset.optionEnd;
+                     handleApproval(requestId, startDate, endDate);
+                } else if (e.target.classList.contains('reject-btn')) {
+                     handleRejection(requestId);
+                }
+            });
+
+            document.getElementById('prev-month').addEventListener('click', () => {
+                calendarDate = calendarDate.subtract(1, 'month');
+                renderCalendar();
+            });
+
+            document.getElementById('next-month').addEventListener('click', () => {
+                calendarDate = calendarDate.add(1, 'month');
+                renderCalendar();
+            });
+            
+            document.getElementById('run-simulation-btn').addEventListener('click', handleSimulation);
+        });
+
+        function renderAll() {
+            renderPendingRequests();
+            renderRiskAlerts();
+            renderFinancialProvision();
+            renderCalendar();
+            renderSimulationTools();
+        }
+
+    </script>
+</body>
+</html>
