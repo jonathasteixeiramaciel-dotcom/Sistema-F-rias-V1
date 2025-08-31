@@ -1,0 +1,969 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { 
+    getFirestore, 
+    collection, 
+    doc, 
+    onSnapshot, 
+    writeBatch,
+    setDoc,
+    addDoc,
+    Timestamp
+} from 'firebase/firestore';
+
+// --- Ícones (SVG como componentes React) ---
+const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
+const AlertTriangleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
+const PieChartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>;
+const UploadCloudIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="M12 12v9"></path><path d="m16 16-4-4-4 4"></path></svg>;
+const DownloadCloudIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="M12 12v9"></path><path d="m8 17 4 4 4-4"></path></svg>;
+const CheckCircleIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+const XCircleIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>;
+const InfoIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>;
+const UsersIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
+const DollarSignIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
+const TrendingDownIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>;
+
+
+// --- Configuração do Firebase ---
+// As variáveis __app_id, __firebase_config e __initial_auth_token são injetadas pelo ambiente
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+let app, db, auth;
+try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+} catch (e) {
+    console.error("Erro ao inicializar o Firebase:", e);
+}
+
+// --- Dados Iniciais para Simulação ---
+const funcionariosIniciais = [
+    { matricula: '101', nome: 'Ana Julia', cargo: 'Analista de Marketing', area_funcional: 'Marketing', salario_base: 4500.00, media_variaveis_mensal: 250.00, data_admissao: '2023-03-15', periodo_aquisitivo_inicio: '2024-03-15', periodo_aquisitivo_fim: '2025-03-14', dias_ferias_disponiveis: 30 },
+    { matricula: '102', nome: 'Bruno Cesar', cargo: 'Desenvolvedor Pleno', area_funcional: 'Tecnologia', salario_base: 7200.00, media_variaveis_mensal: 0, data_admissao: '2022-11-10', periodo_aquisitivo_inicio: '2023-11-10', periodo_aquisitivo_fim: '2024-11-09', dias_ferias_disponiveis: 30 },
+    { matricula: '103', nome: 'Carla Dias', cargo: 'Analista Financeiro', area_funcional: 'Financeiro', salario_base: 5100.00, media_variaveis_mensal: 400.00, data_admissao: '2023-01-20', periodo_aquisitivo_inicio: '2024-01-20', periodo_aquisitivo_fim: '2025-01-19', dias_ferias_disponiveis: 30 },
+    { matricula: '104', nome: 'Daniel Alves', cargo: 'Desenvolvedor Sênior', area_funcional: 'Tecnologia', salario_base: 9500.00, media_variaveis_mensal: 800.00, data_admissao: '2021-08-01', periodo_aquisitivo_inicio: '2023-08-01', periodo_aquisitivo_fim: '2024-08-31', dias_ferias_disponiveis: 30 },
+    { matricula: '105', nome: 'Elena Santos', cargo: 'Gerente de Vendas', area_funcional: 'Comercial', salario_base: 8000.00, media_variaveis_mensal: 1500.00, data_admissao: '2022-05-22', periodo_aquisitivo_inicio: '2023-05-22', periodo_aquisitivo_fim: '2024-05-21', dias_ferias_disponiveis: 0 },
+];
+
+const orcamentoInicial = {
+    "2025-01": 15000, "2025-02": 12000, "2025-03": 10000, "2025-04": 10000, "2025-05": 18000, "2025-06": 20000,
+    "2025-07": 25000, "2025-08": 15000, "2025-09": 10000, "2025-10": 12000, "2025-11": 18000, "2025-12": 30000,
+};
+
+// --- Funções Utilitárias ---
+const dateToISO = (date) => date.toISOString().split('T')[0];
+const addDays = (dateStr, days) => {
+    const date = new Date(dateStr + 'T00:00:00');
+    date.setDate(date.getDate() + days);
+    return dateToISO(date);
+};
+const diffDays = (dateStr1, dateStr2) => {
+    const date1 = new Date(dateStr1);
+    const date2 = new Date(dateStr2);
+    return Math.round((date2 - date1) / (1000 * 60 * 60 * 24));
+};
+const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+const today = dateToISO(new Date());
+
+// --- Lógica de Negócio (CLT e Cálculos) ---
+const calcularCustoTotalPeriodo = (funcionario, dias_periodo, dias_abono = 0) => {
+    if (!funcionario) return 0;
+    const base_calculo = funcionario.salario_base + (funcionario.media_variaveis_mensal || 0);
+    const valor_ferias = (base_calculo / 30) * dias_periodo;
+    const valor_terco = valor_ferias / 3;
+    const valor_abono = (base_calculo / 30) * (dias_abono || 0);
+    // Simulação de encargos (20% INSS patronal + 8% FGTS) - simplificado
+    const encargos_estimados = (valor_ferias * 0.20) + ((valor_ferias + valor_terco) * 0.08);
+    return valor_ferias + valor_terco + valor_abono + encargos_estimados;
+};
+
+const calcularRateioMensal = (custo_total, inicio, fim) => {
+    const rateio = {};
+    const d_inicio = new Date(inicio + 'T00:00:00');
+    const d_fim = new Date(fim + 'T00:00:00');
+    const total_dias = diffDays(inicio, fim) + 1;
+    if (total_dias <= 0) return {};
+    
+    const custo_diario = custo_total / total_dias;
+    let data_corrente = new Date(d_inicio);
+
+    while (data_corrente <= d_fim) {
+        const mes_ano = data_corrente.toISOString().slice(0, 7);
+        if (!rateio[mes_ano]) {
+            rateio[mes_ano] = 0;
+        }
+        rateio[mes_ano] += custo_diario;
+        data_corrente.setDate(data_corrente.getDate() + 1);
+    }
+    return rateio;
+};
+
+const validarFracionamento = (periodos, dias_disponiveis) => {
+    const totalDiasSolicitados = periodos.reduce((acc, p) => acc + p.dias, 0);
+    if (totalDiasSolicitados > dias_disponiveis) return "Saldo de dias insuficiente.";
+    if (periodos.length > 3) return "Máximo de 3 períodos.";
+    if (periodos.length > 0) {
+        if (!periodos.some(p => p.dias >= 14)) return "Um período deve ter no mínimo 14 dias.";
+        if (periodos.some(p => p.dias < 5)) return "Demais períodos devem ter no mínimo 5 dias.";
+    }
+    return "ok";
+};
+
+// --- Componentes de UI Reutilizáveis ---
+const Tooltip = ({ text, children }) => (
+    <div className="relative flex items-center group">
+        {children}
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-xs p-2 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+            {text}
+        </div>
+    </div>
+);
+
+const Card = ({ children, className = '' }) => (
+    <div className={`bg-white rounded-lg shadow p-6 ${className}`}>
+        {children}
+    </div>
+);
+
+const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button' }) => {
+    const baseStyle = 'px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
+    const variantStyles = {
+        primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
+        secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400',
+        danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+        ghost: 'bg-transparent text-blue-600 hover:bg-blue-50'
+    };
+    return <button type={type} onClick={onClick} className={`${baseStyle} ${variantStyles[variant]} ${className}`}>{children}</button>;
+};
+
+const Modal = ({ isOpen, onClose, title, children }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                 <div className="flex justify-between items-center p-4 border-b">
+                    <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button>
+                </div>
+                <div className="p-6 overflow-y-auto">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Telas Principais ---
+
+function DashboardGestor({ setPage, funcionarios, solicitacoes, orcamentoData }) {
+    const [riscoCritico, setRiscoCritico] = useState([]);
+    const [pendentes, setPendentes] = useState([]);
+
+    useEffect(() => {
+        const hoje = new Date();
+        const funcionariosComRisco = funcionarios
+            .filter(f => {
+                if (!f.periodo_aquisitivo_fim) return false;
+                const fimConcessivo = new Date(f.periodo_aquisitivo_fim);
+                fimConcessivo.setFullYear(fimConcessivo.getFullYear() + 1);
+                const diasParaVencer = diffDays(hoje.toISOString().split('T')[0], fimConcessivo.toISOString().split('T')[0]);
+                const temAgendamentoAprovado = solicitacoes.some(s => s.matricula === f.matricula && s.status === 'Aprovado');
+                return diasParaVencer <= 60 && diasParaVencer > 0 && !temAgendamentoAprovado && f.dias_ferias_disponiveis > 0;
+            });
+        
+        setRiscoCritico(funcionariosComRisco);
+        setPendentes(solicitacoes.filter(s => s.status === 'Pendente'));
+    }, [funcionarios, solicitacoes]);
+
+    const provisaoMesAtual = useMemo(() => {
+        const mesAtual = new Date().toISOString().slice(0, 7);
+        return Object.values(solicitacoes)
+            .filter(s => s.status === 'Aprovado' && s.rateio && s.rateio[mesAtual])
+            .reduce((acc, s) => acc + s.rateio[mesAtual], 0);
+    }, [solicitacoes]);
+
+    const orcamentoMesAtual = orcamentoData[new Date().toISOString().slice(0, 7)] || 0;
+    const saldoMesAtual = orcamentoMesAtual - provisaoMesAtual;
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card className="md:col-span-2 lg:col-span-1 bg-yellow-50 border-l-4 border-yellow-400">
+                <div className="flex items-start">
+                    <AlertTriangleIcon className="h-8 w-8 text-yellow-500 mr-4"/>
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800">Painel de Riscos e Alertas</h3>
+                        <p className="text-gray-600 mt-1">
+                            Atenção: <span className="font-bold">{riscoCritico.length}</span> colaborador(es) próximo(s) de vencer férias.
+                        </p>
+                         <Button onClick={() => setPage('riscos')} className="mt-4 text-sm" variant="ghost">Ver Painel de Riscos</Button>
+                    </div>
+                </div>
+            </Card>
+
+            <Card>
+                <h3 className="text-lg font-bold text-gray-800">Aprovações Pendentes</h3>
+                <p className="text-gray-600 mt-1"><span className="font-bold">{pendentes.length}</span> solicitações aguardando análise.</p>
+                <ul className="mt-3 space-y-2 text-sm">
+                    {pendentes.slice(0, 3).map(s => {
+                        const func = funcionarios.find(f => f.matricula === s.matricula);
+                        return <li key={s.id} className="text-gray-700">{func?.nome || 'Desconhecido'}</li>;
+                    })}
+                </ul>
+                <Button onClick={() => setPage('aprovacoes')} className="mt-4 text-sm" variant="ghost">Analisar Solicitações</Button>
+            </Card>
+
+            <Card>
+                <h3 className="text-lg font-bold text-gray-800">Orçamento & Provisão (Mês Atual)</h3>
+                 <div className="text-center my-4">
+                    <p className="text-2xl font-bold text-gray-800">{formatCurrency(saldoMesAtual)}</p>
+                    <p className="text-sm text-gray-500">Saldo do mês</p>
+                </div>
+                <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Orçado:</span> <span className="font-semibold">{formatCurrency(orcamentoMesAtual)}</span>
+                </div>
+                <div className="flex justify-between text-sm mt-1">
+                    <span className="text-gray-600">Provisionado:</span> <span className="font-semibold">{formatCurrency(provisaoMesAtual)}</span>
+                </div>
+                <Button onClick={() => setPage('provisao')} className="mt-4 text-sm" variant="ghost">Ver Detalhes Financeiros</Button>
+            </Card>
+        </div>
+    );
+}
+
+function PainelRiscos({ setPage, funcionarios, solicitacoes }) {
+    const [limiteDias, setLimiteDias] = useState(60);
+    const [filtroArea, setFiltroArea] = useState('');
+    const [verTodos, setVerTodos] = useState(false);
+
+    const funcionariosComStatus = useMemo(() => {
+        const hoje = new Date();
+        return funcionarios.map(f => {
+            if (!f.periodo_aquisitivo_fim || f.dias_ferias_disponiveis === 0) {
+                return { ...f, statusRisco: 'sem_risco', diasParaVencer: Infinity, dataLimiteGozo: null };
+            }
+
+            const fimConcessivo = new Date(f.periodo_aquisitivo_fim);
+            fimConcessivo.setFullYear(fimConcessivo.getFullYear() + 1);
+            const diasParaVencer = diffDays(hoje.toISOString().split('T')[0], fimConcessivo.toISOString().split('T')[0]);
+            
+            const temAgendamento = solicitacoes.find(s => s.matricula === f.matricula && ['Aprovado', 'Pendente'].includes(s.status));
+            
+            let statusRisco = 'sem_risco';
+            if (diasParaVencer <= 0) statusRisco = 'vencido';
+            else if (diasParaVencer <= 30) statusRisco = 'critico';
+            else if (diasParaVencer <= limiteDias) statusRisco = 'alerta';
+
+            if (temAgendamento?.status === 'Aprovado') statusRisco = 'agendado';
+            else if (temAgendamento?.status === 'Pendente' && (statusRisco === 'critico' || statusRisco === 'alerta')) {
+                statusRisco = 'pendente_com_risco';
+            }
+            
+            return { ...f, statusRisco, diasParaVencer, dataLimiteGozo: fimConcessivo.toISOString().split('T')[0] };
+        });
+    }, [funcionarios, solicitacoes, limiteDias]);
+
+    const areas = [...new Set(funcionarios.map(f => f.area_funcional))];
+
+    const filtrados = funcionariosComStatus.filter(f => {
+        if (!verTodos && !['critico', 'alerta', 'vencido'].includes(f.statusRisco)) return false;
+        if (filtroArea && f.area_funcional !== filtroArea) return false;
+        return true;
+    });
+
+    const renderCard = (f) => {
+        const statusMap = {
+            critico: { cor: 'border-red-500', texto: 'Crítico' },
+            alerta: { cor: 'border-yellow-500', texto: 'Alerta' },
+            vencido: { cor: 'border-black bg-red-100', texto: 'Vencido' },
+        };
+        const { cor, texto } = statusMap[f.statusRisco] || {};
+        
+        return (
+            <Card key={f.matricula} className={`border-l-4 ${cor}`}>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <p className="font-bold text-gray-800">{f.nome}</p>
+                        <p className="text-sm text-gray-600">{f.area_funcional}</p>
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${cor?.replace('border', 'bg')?.replace('-500', '-100')} ${cor?.replace('border', 'text')}`}>{texto}</span>
+                </div>
+                <div className="mt-4 text-sm space-y-2">
+                    <p>Dias a vencer: <span className="font-semibold">{f.dias_ferias_disponiveis}</span></p>
+                    <p>Data Limite para Gozo: <span className="font-semibold">{f.dataLimiteGozo}</span></p>
+                    <p>Dias até o vencimento: <span className="font-semibold text-red-600">{f.diasParaVencer}</span></p>
+                </div>
+                <Button className="mt-4 w-full" onClick={() => alert(`Agendamento para ${f.nome}`)}>Agendar Agora</Button>
+            </Card>
+        );
+    };
+
+    const renderTabela = () => {
+        const grupos = {
+            vencido: [], critico: [], alerta: [], pendente_com_risco: [], agendado: [], sem_risco: [],
+        };
+        filtrados.forEach(f => {
+            grupos[f.statusRisco]?.push(f);
+        });
+        
+        const renderGrupo = (titulo, funcionariosGrupo, cor) => (
+            <div key={titulo}>
+                <h3 className={`text-lg font-semibold mt-6 mb-3 p-2 rounded-md bg-${cor}-100 text-${cor}-800`}>{titulo}</h3>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white text-sm">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="p-3 text-left">Nome</th>
+                                <th className="p-3 text-left">Área</th>
+                                <th className="p-3 text-left">Dias até Vencer</th>
+                                <th className="p-3 text-left">Data Limite</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                        {funcionariosGrupo.map(f => (
+                            <tr key={f.matricula}>
+                                <td className="p-3">{f.nome}</td>
+                                <td className="p-3">{f.area_funcional}</td>
+                                <td className={`p-3 font-bold ${f.diasParaVencer <= 30 ? 'text-red-600' : 'text-yellow-600'}`}>{f.diasParaVencer > 0 ? f.diasParaVencer : 'VENCIDO'}</td>
+                                <td className="p-3">{f.dataLimiteGozo}</td>
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+
+        return (
+            <>
+                {renderGrupo("Vencido / Risco Crítico (< 30 dias)", [...grupos.vencido, ...grupos.critico], 'red')}
+                {renderGrupo("Alerta de Vencimento (31-60 dias)", grupos.alerta, 'yellow')}
+                {renderGrupo("Com Risco e Solicitação Pendente", grupos.pendente_com_risco, 'blue')}
+                {renderGrupo("Com Férias Agendadas", grupos.agendado, 'green')}
+                {renderGrupo("Sem Risco Imediato", grupos.sem_risco, 'gray')}
+            </>
+        );
+    };
+
+    return (
+        <div>
+            <div className="flex flex-wrap gap-4 justify-between items-center mb-6 bg-white p-4 rounded-lg shadow">
+                <div>
+                    <label htmlFor="limiteDias" className="text-sm font-medium text-gray-700">Exibir vencimentos em até</label>
+                    <input id="limiteDias" type="number" value={limiteDias} onChange={e => setLimiteDias(Number(e.target.value))} className="ml-2 w-20 p-2 border rounded-md"/>
+                    <span className="ml-1">dias</span>
+                </div>
+                <div className="flex gap-4">
+                    <select value={filtroArea} onChange={e => setFiltroArea(e.target.value)} className="p-2 border rounded-md">
+                        <option value="">Todas as áreas</option>
+                        {areas.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                    <Button onClick={() => setVerTodos(!verTodos)} variant="secondary">
+                        {verTodos ? 'Ver Apenas Riscos' : 'Ver Todos'}
+                    </Button>
+                </div>
+            </div>
+
+            {verTodos ? renderTabela() : (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filtrados.filter(f => ['critico', 'alerta', 'vencido'].includes(f.statusRisco)).map(renderCard)}
+                 </div>
+            )}
+        </div>
+    );
+}
+
+function ProvisaoOrcamento({ orcamentoData, solicitacoes, onUpdateOrcamento }) {
+    const [mesSelecionado, setMesSelecionado] = useState(new Date().toISOString().slice(0, 7));
+
+    const dadosProvisao = useMemo(() => {
+        const provisionado = {};
+        solicitacoes.filter(s => s.status === 'Aprovado' && s.rateio).forEach(s => {
+            for (const [mes, valor] of Object.entries(s.rateio)) {
+                if (!provisionado[mes]) provisionado[mes] = 0;
+                provisionado[mes] += valor;
+            }
+        });
+        
+        const meses = [...new Set([...Object.keys(orcamentoData), ...Object.keys(provisionado)])].sort();
+        
+        return meses.map(mes => {
+            const orcado = orcamentoData[mes] || 0;
+            const prov = provisionado[mes] || 0;
+            return {
+                mes,
+                orcado,
+                prov,
+                saldo: orcado - prov
+            };
+        });
+    }, [orcamentoData, solicitacoes]);
+
+    const detalhamentoMes = useMemo(() => {
+        return solicitacoes.filter(s => s.status === 'Aprovado' && s.rateio && s.rateio[mesSelecionado]);
+    }, [solicitacoes, mesSelecionado]);
+
+    return (
+        <div>
+            <Card>
+                <h3 className="text-lg font-bold text-gray-800">Orçado vs. Provisionado</h3>
+                <div className="h-64 mt-4 bg-gray-50 p-2 rounded">
+                    {/* Gráfico Simulado */}
+                    <div className="flex h-full items-end gap-2">
+                        {dadosProvisao.slice(-12).map(({mes, orcado, prov}) => (
+                            <div key={mes} className="flex-1 flex flex-col items-center justify-end">
+                                <div className="flex items-end h-full w-full gap-1">
+                                    <div className="bg-blue-300 w-1/2" style={{height: `${(orcado / 30000) * 100}%`}}></div>
+                                    <div className="bg-orange-400 w-1/2" style={{height: `${(prov / 30000) * 100}%`}}></div>
+                                </div>
+                                <span className="text-xs mt-1">{mes}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Card>
+
+            <Card className="mt-6">
+                <h3 className="text-lg font-bold text-gray-800">Tabela de Orçamento Mensal</h3>
+                <div className="overflow-x-auto mt-4 max-h-96">
+                    <table className="min-w-full bg-white text-sm">
+                        <thead className="bg-gray-100 sticky top-0">
+                            <tr>
+                                <th className="p-3 text-left">Mês (YYYY-MM)</th>
+                                <th className="p-3 text-left">Orçamento (R$)</th>
+                                <th className="p-3 text-left">Provisão Calculada (R$)</th>
+                                <th className="p-3 text-left">Saldo (R$)</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                        {dadosProvisao.map(({mes, orcado, prov, saldo}) => (
+                            <tr key={mes} onClick={() => setMesSelecionado(mes)} className={`cursor-pointer hover:bg-gray-50 ${mes === mesSelecionado ? 'bg-blue-50' : ''}`}>
+                                <td className="p-3 font-semibold">{mes}</td>
+                                <td className="p-3">
+                                    <input type="number" value={orcado} 
+                                    onChange={(e) => onUpdateOrcamento(mes, parseFloat(e.target.value))} 
+                                    className="p-1 border rounded w-32 bg-gray-50" />
+                                </td>
+                                <td className="p-3">{formatCurrency(prov)}</td>
+                                <td className={`p-3 font-semibold ${saldo < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(saldo)}</td>
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+            
+            <Card className="mt-6">
+                <h3 className="text-lg font-bold text-gray-800">Detalhamento da Provisão para {mesSelecionado}</h3>
+                 <div className="overflow-x-auto mt-4">
+                    <table className="min-w-full bg-white text-sm">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="p-3 text-left">Colaborador</th>
+                                <th className="p-3 text-left">Período de Férias</th>
+                                <th className="p-3 text-left">Custo Total</th>
+                                <th className="p-3 text-left">Valor Provisionado no Mês</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                        {detalhamentoMes.map(s => (
+                             <tr key={s.id}>
+                                <td className="p-3">{s.nomeFuncionario}</td>
+                                <td className="p-3">
+                                    {s.periodos && s.periodos.length > 0 ? 
+                                        `${s.periodos[0].inicio} a ${s.periodos[s.periodos.length - 1].fim}` :
+                                        'N/A'
+                                    }
+                                </td>
+                                <td className="p-3">{formatCurrency(s.custoTotal)}</td>
+                                <td className="p-3 font-semibold">{formatCurrency(s.rateio[mesSelecionado])}</td>
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+
+function AprovacaoSolicitacoes({ solicitacoes, funcionarios, onUpdateSolicitacao }) {
+
+    const pendentes = solicitacoes.filter(s => s.status === 'Pendente');
+
+    const getScore = (solicitacao) => {
+        const funcionario = funcionarios.find(f => f.matricula === solicitacao.matricula);
+        if (!funcionario) return { financeiro: 'Baixo', operacional: 'Baixo', risco: 'Baixo' };
+        
+        // Risco CLT
+        const fimConcessivo = new Date(funcionario.periodo_aquisitivo_fim);
+        fimConcessivo.setFullYear(fimConcessivo.getFullYear() + 1);
+        const diasParaVencer = diffDays(today, fimConcessivo.toISOString().split('T')[0]);
+        const risco = diasParaVencer < 30 ? '🔥 Alto' : diasParaVencer < 90 ? '⚠️ Médio' : '✅ Baixo';
+        
+        // Impacto Financeiro (simplificado)
+        const custo = solicitacao.custoTotal || 0;
+        const financeiro = custo > 7000 ? '💰💰💰 Alto' : custo > 4000 ? '💰💰 Médio' : '💰 Baixo';
+
+        // Impacto Operacional (simulado)
+        const operacional = '👥 Baixo'; // Lógica mais complexa necessária aqui
+
+        return { financeiro, operacional, risco };
+    };
+    
+    const handleUpdate = (id, status, motivo = '') => {
+        onUpdateSolicitacao(id, { status, motivoReprovacao: motivo });
+    };
+
+    return (
+        <div className="space-y-4">
+            {pendentes.length === 0 && <p className="text-gray-600">Nenhuma solicitação pendente.</p>}
+            {pendentes.map(s => {
+                const func = funcionarios.find(f => f.matricula === s.matricula);
+                const score = getScore(s);
+                return (
+                    <Card key={s.id}>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                                <p className="font-bold text-lg">{func?.nome}</p>
+                                <p className="text-sm text-gray-600">{func?.area_funcional}</p>
+                                <div className="mt-4 space-y-1 text-sm">
+                                    <p><strong>Impacto Financeiro:</strong> {score.financeiro}</p>
+                                    <p><strong>Impacto Operacional:</strong> {score.operacional}</p>
+                                    <p><strong>Risco CLT:</strong> {score.risco}</p>
+                                </div>
+                            </div>
+                            <div className="md:col-span-2">
+                                <h4 className="font-semibold mb-2">Períodos Solicitados:</h4>
+                                <div className="space-y-2">
+                                    {s.periodos.map((p, index) => (
+                                        <div key={index} className="bg-gray-100 p-3 rounded-md flex justify-between items-center">
+                                            <div>
+                                                <p className="font-semibold">{p.inicio} a {p.fim} ({p.dias} dias)</p>
+                                            </div>
+                                            <Button onClick={() => handleUpdate(s.id, 'Aprovado')}>Aprovar</Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-4 flex gap-2">
+                                    <Button variant="danger" onClick={() => {
+                                        const motivo = prompt('Motivo da reprovação:');
+                                        if (motivo) handleUpdate(s.id, 'Reprovado', motivo);
+                                    }}>Reprovar</Button>
+                                    <Button variant="secondary" onClick={() => alert('Função "Sugerir Alteração" não implementada.')}>Sugerir Alteração</Button>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                );
+            })}
+        </div>
+    );
+}
+
+function SolicitacaoFerias({ funcionario, onSave, onCancel }) {
+    const [periodos, setPeriodos] = useState([]);
+    const [diasAbono, setDiasAbono] = useState(0);
+    const [temAbono, setTemAbono] = useState(false);
+    const [observacoes, setObservacoes] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    
+    const diasDisponiveis = funcionario.dias_ferias_disponiveis - periodos.reduce((acc, p) => acc + p.dias, 0);
+    const validacao = validarFracionamento(periodos, funcionario.dias_ferias_disponiveis);
+
+    const addPeriodo = () => {
+        if (startDate && endDate) {
+            const dias = diffDays(startDate, endDate) + 1;
+            if(dias <= 0) {
+                alert("A data final deve ser posterior à data inicial.");
+                return;
+            }
+            setPeriodos([...periodos, { inicio: startDate, fim: endDate, dias }]);
+            setStartDate('');
+            setEndDate('');
+        }
+    };
+    
+    const handleSubmit = () => {
+        if (validacao !== 'ok') {
+            alert(`Erro na validação: ${validacao}`);
+            return;
+        }
+        onSave({
+            matricula: funcionario.matricula,
+            nomeFuncionario: funcionario.nome,
+            periodos,
+            tem_abono: temAbono,
+            dias_abono: temAbono ? diasAbono : 0,
+            observacoes,
+            status: 'Pendente',
+            data_solicitacao: Timestamp.now()
+        });
+    };
+
+    return (
+        <Card>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="md:col-span-2">
+                    <h3 className="text-lg font-bold">Selecione os períodos</h3>
+                    <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+                        <div className="flex items-end gap-4">
+                             <div>
+                                <label className="text-sm font-medium">Início</label>
+                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 border rounded-md"/>
+                             </div>
+                             <div>
+                                <label className="text-sm font-medium">Fim</label>
+                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 border rounded-md"/>
+                             </div>
+                             <Button onClick={addPeriodo} disabled={!startDate || !endDate}>Adicionar</Button>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-6 space-y-3">
+                        {periodos.map((p, index) => (
+                             <div key={index} className="flex justify-between items-center p-3 bg-blue-50 rounded-md">
+                                <p><strong>Período {index+1}:</strong> {p.inicio} a {p.fim} ({p.dias} dias)</p>
+                                <div>
+                                    {p.dias >= 14 && <span className="text-green-600 text-xs font-bold mr-2">✔ 14+</span>}
+                                    {p.dias >= 5 && <span className="text-green-600 text-xs font-bold">✔ 5+</span>}
+                                </div>
+                                <button onClick={() => setPeriodos(periodos.filter((_, i) => i !== index))} className="text-red-500 hover:text-red-700">Remover</button>
+                             </div>
+                        ))}
+                    </div>
+                </div>
+                <div>
+                    <h3 className="text-lg font-bold">Resumo</h3>
+                    <div className="mt-4 space-y-2 p-4 bg-gray-100 rounded-lg">
+                        <p>Disponível: <span className="font-bold">{funcionario.dias_ferias_disponiveis} dias</span></p>
+                        <p>Saldo Restante: <span className="font-bold">{diasDisponiveis} dias</span></p>
+                    </div>
+
+                    <div className="mt-6">
+                        <label className="flex items-center">
+                            <input type="checkbox" checked={temAbono} onChange={e => setTemAbono(e.target.checked)} className="h-4 w-4"/>
+                            <span className="ml-2">Desejo vender férias (abono)</span>
+                        </label>
+                        {temAbono && (
+                             <div className="mt-2">
+                                <label className="text-sm">Dias de abono (máx. 10)</label>
+                                <input type="number" min="0" max="10" value={diasAbono} onChange={e => setDiasAbono(Number(e.target.value))} className="w-full p-2 border rounded-md"/>
+                             </div>
+                        )}
+                    </div>
+
+                    <div className="mt-6">
+                        <label className="text-sm font-medium">Observações</label>
+                        <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} className="w-full p-2 border rounded-md h-24"></textarea>
+                    </div>
+
+                    <div className="mt-6 flex flex-col gap-2">
+                        {validacao !== 'ok' && <p className="text-red-600 text-sm">{validacao}</p>}
+                        <Button onClick={handleSubmit} disabled={validacao !== 'ok' || periodos.length === 0}>Enviar para Aprovação</Button>
+                        <Button onClick={onCancel} variant="secondary">Cancelar</Button>
+                    </div>
+                </div>
+            </div>
+        </Card>
+    );
+}
+
+function DashboardFuncionario({ setPage, funcionario, solicitacoes }) {
+    const minhasSolicitacoes = solicitacoes.filter(s => s.matricula === funcionario.matricula);
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="md:col-span-2">
+                <h3 className="text-xl font-bold">Minhas Férias</h3>
+                <p className="mt-2 text-gray-600">
+                    Você tem <span className="font-bold text-blue-600 text-lg">{funcionario.dias_ferias_disponiveis}</span> dias de férias disponíveis.
+                </p>
+                <p className="text-sm text-gray-500">Período Aquisitivo: {funcionario.periodo_aquisitivo_inicio} a {funcionario.periodo_aquisitivo_fim}</p>
+                <Button onClick={() => setPage('solicitarFerias')} className="mt-6">Solicitar Férias</Button>
+            </Card>
+            <Card>
+                <h3 className="text-lg font-bold">Minhas Solicitações</h3>
+                <ul className="mt-4 space-y-3">
+                    {minhasSolicitacoes.map(s => (
+                        <li key={s.id} className="p-3 bg-gray-50 rounded-md">
+                           <div className="flex justify-between">
+                                <p className="text-sm font-semibold">
+                                    {s.periodos && s.periodos.length > 0 ? 
+                                        `${s.periodos[0].inicio} (${s.periodos.reduce((a, b) => a + b.dias, 0)} dias)` :
+                                        'Período não definido'
+                                    }
+                                </p>
+                                <span className={`px-2 py-1 text-xs font-bold rounded-full ${
+                                    s.status === 'Aprovado' ? 'bg-green-100 text-green-800' :
+                                    s.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                }`}>{s.status}</span>
+                           </div>
+                        </li>
+                    ))}
+                </ul>
+            </Card>
+        </div>
+    );
+}
+
+// --- Componente Principal da Aplicação ---
+export default function App() {
+    // --- Estados ---
+    const [page, setPage] = useState('home');
+    const [userType, setUserType] = useState('gestor'); // 'gestor' ou 'funcionario'
+    const [selectedFuncionario, setSelectedFuncionario] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    
+    // Estados para dados do Firestore
+    const [funcionarios, setFuncionarios] = useState([]);
+    const [solicitacoes, setSolicitacoes] = useState([]);
+    const [orcamento, setOrcamento] = useState({});
+    
+    // Estados do Firebase
+    const [userId, setUserId] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+
+    // --- Efeitos ---
+    useEffect(() => {
+        if (!auth) {
+            setError("Firebase Auth não inicializado.");
+            setLoading(false);
+            return;
+        }
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                setUserId(user.uid);
+            } else {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (err) {
+                    console.error("Erro na autenticação:", err);
+                    setError("Falha ao autenticar. Verifique a configuração do Firebase.");
+                }
+            }
+            setIsAuthReady(true);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const dataLoadedRef = React.useRef(false);
+
+    const seedInitialData = useCallback(async () => {
+        if (!db) return;
+        console.log("Verificando necessidade de popular dados...");
+        const batch = writeBatch(db);
+
+        // Funcionários
+        funcionariosIniciais.forEach(func => {
+            const docRef = doc(db, `artifacts/${appId}/public/data/funcionarios`, func.matricula);
+            batch.set(docRef, func);
+        });
+
+        // Orçamento
+        Object.entries(orcamentoInicial).forEach(([mes, valor]) => {
+            const docRef = doc(db, `artifacts/${appId}/public/data/orcamento`, mes);
+            batch.set(docRef, { valor });
+        });
+
+        try {
+            await batch.commit();
+            console.log("Dados iniciais populados com sucesso!");
+        } catch (e) {
+            console.error("Erro ao popular dados iniciais:", e);
+        }
+    }, []);
+
+
+    useEffect(() => {
+        if (isAuthReady && db && !dataLoadedRef.current) {
+            setLoading(true);
+
+            const unsubFuncionarios = onSnapshot(collection(db, `artifacts/${appId}/public/data/funcionarios`), 
+                (snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (data.length === 0) {
+                        seedInitialData();
+                    } else {
+                        setFuncionarios(data);
+                    }
+                    dataLoadedRef.current = true; // Mark as loaded to prevent re-seeding
+                }, 
+                (err) => {
+                    console.error("Erro ao buscar funcionários:", err);
+                    setError("Não foi possível carregar os dados dos funcionários.");
+                }
+            );
+
+            const unsubSolicitacoes = onSnapshot(collection(db, `artifacts/${appId}/public/data/solicitacoes`), 
+                (snapshot) => {
+                    const data = snapshot.docs.map(doc => {
+                        const d = doc.data();
+                        return { 
+                            id: doc.id, 
+                            ...d,
+                            data_solicitacao: d.data_solicitacao?.toDate().toISOString()
+                        };
+                    });
+                    setSolicitacoes(data);
+                },
+                (err) => {
+                    console.error("Erro ao buscar solicitações:", err);
+                    setError("Não foi possível carregar as solicitações.");
+                }
+            );
+
+            const unsubOrcamento = onSnapshot(collection(db, `artifacts/${appId}/public/data/orcamento`), 
+                (snapshot) => {
+                    const data = {};
+                    snapshot.docs.forEach(doc => {
+                        data[doc.id] = doc.data().valor;
+                    });
+                    setOrcamento(data);
+                },
+                (err) => {
+                    console.error("Erro ao buscar orçamento:", err);
+                    setError("Não foi possível carregar os dados de orçamento.");
+                }
+            );
+            
+            setLoading(false);
+
+            return () => {
+                unsubFuncionarios();
+                unsubSolicitacoes();
+                unsubOrcamento();
+            };
+        }
+    }, [isAuthReady, seedInitialData]);
+
+
+    // --- Handlers ---
+    const handleSaveSolicitacao = async (solicitacaoData) => {
+        const funcionario = funcionarios.find(f => f.matricula === solicitacaoData.matricula);
+        if (!funcionario) return;
+
+        const custoTotal = solicitacaoData.periodos.reduce((acc, p) => 
+            acc + calcularCustoTotalPeriodo(funcionario, p.dias, solicitacaoData.dias_abono), 0);
+            
+        const rateioAgregado = {};
+        solicitacaoData.periodos.forEach(p => {
+            const custoPeriodo = calcularCustoTotalPeriodo(funcionario, p.dias, solicitacaoData.dias_abono);
+            const rateioPeriodo = calcularRateioMensal(custoPeriodo, p.inicio, p.fim);
+            for(const mes in rateioPeriodo) {
+                if(!rateioAgregado[mes]) rateioAgregado[mes] = 0;
+                rateioAgregado[mes] += rateioPeriodo[mes];
+            }
+        });
+        
+        const dataToSave = { ...solicitacaoData, custoTotal, rateio: rateioAgregado };
+        
+        try {
+            await addDoc(collection(db, `artifacts/${appId}/public/data/solicitacoes`), dataToSave);
+            setPage('home');
+        } catch (e) {
+            console.error("Erro ao salvar solicitação:", e);
+            alert("Não foi possível salvar a solicitação.");
+        }
+    };
+    
+    const handleUpdateSolicitacao = async (id, updates) => {
+        try {
+            await setDoc(doc(db, `artifacts/${appId}/public/data/solicitacoes`, id), updates, { merge: true });
+        } catch (e) {
+            console.error("Erro ao atualizar solicitação:", e);
+            alert("Não foi possível atualizar a solicitação.");
+        }
+    };
+    
+    const handleUpdateOrcamento = async (mes, valor) => {
+        try {
+            await setDoc(doc(db, `artifacts/${appId}/public/data/orcamento`, mes), { valor });
+        } catch (e) {
+            console.error("Erro ao atualizar orçamento:", e);
+            alert("Não foi possível atualizar o orçamento.");
+        }
+    };
+
+    // --- Renderização ---
+    const renderPage = () => {
+        if (loading) return <div className="text-center p-10">Carregando dados...</div>;
+        if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
+
+        if (userType === 'funcionario') {
+            const func = selectedFuncionario || funcionarios[0];
+            if (!func) return <p>Nenhum funcionário selecionado.</p>;
+            
+            switch (page) {
+                case 'home': return <DashboardFuncionario setPage={setPage} funcionario={func} solicitacoes={solicitacoes} />;
+                case 'solicitarFerias': return <SolicitacaoFerias funcionario={func} onSave={handleSaveSolicitacao} onCancel={() => setPage('home')} />;
+                default: setPage('home'); return null;
+            }
+        }
+
+        switch (page) {
+            case 'home': return <DashboardGestor setPage={setPage} funcionarios={funcionarios} solicitacoes={solicitacoes} orcamentoData={orcamento} />;
+            case 'riscos': return <PainelRiscos setPage={setPage} funcionarios={funcionarios} solicitacoes={solicitacoes} />;
+            case 'provisao': return <ProvisaoOrcamento orcamentoData={orcamento} solicitacoes={solicitacoes} onUpdateOrcamento={handleUpdateOrcamento} />;
+            case 'aprovacoes': return <AprovacaoSolicitacoes solicitacoes={solicitacoes} funcionarios={funcionarios} onUpdateSolicitacao={handleUpdateSolicitacao} />;
+            default: setPage('home'); return null;
+        }
+    };
+    
+    const pageTitles = {
+        home: userType === 'gestor' ? 'Dashboard do Gestor' : `Dashboard de ${selectedFuncionario?.nome || ''}`,
+        riscos: 'Painel de Riscos e Alertas',
+        provisao: 'Provisão & Orçamento',
+        aprovacoes: 'Aprovação de Solicitações',
+        solicitarFerias: 'Solicitar Férias'
+    };
+    
+    return (
+        <div className="bg-gray-50 min-h-screen font-sans text-gray-900">
+            <header className="bg-white shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-2xl font-bold text-gray-800">Gestão de Férias</h1>
+                        <div className="flex items-center gap-4">
+                            <span className="text-xs text-gray-500 hidden sm:block">ID de Usuário: {userId}</span>
+                             <div className="flex items-center p-1 bg-gray-200 rounded-lg">
+                                <button onClick={() => setUserType('gestor')} className={`px-3 py-1 text-sm rounded-md ${userType === 'gestor' ? 'bg-white shadow' : ''}`}>Gestor</button>
+                                <button onClick={() => setUserType('funcionario')} className={`px-3 py-1 text-sm rounded-md ${userType === 'funcionario' ? 'bg-white shadow' : ''}`}>Funcionário</button>
+                            </div>
+                        </div>
+                    </div>
+                     {userType === 'funcionario' && (
+                        <div className="mt-2">
+                            <select value={selectedFuncionario?.matricula || ''} 
+                                    onChange={e => setSelectedFuncionario(funcionarios.find(f => f.matricula === e.target.value))}
+                                    className="p-2 border rounded-md text-sm">
+                                <option value="">Selecione um funcionário para simular</option>
+                                {funcionarios.map(f => <option key={f.matricula} value={f.matricula}>{f.nome}</option>)}
+                            </select>
+                        </div>
+                    )}
+                </div>
+            </header>
+            
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold">{pageTitles[page]}</h2>
+                    {page !== 'home' && <Button onClick={() => setPage('home')} variant="secondary">Voltar ao Dashboard</Button>}
+                </div>
+                {renderPage()}
+            </main>
+        </div>
+    );
+}
+
