@@ -1,0 +1,1027 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { 
+    getFirestore, 
+    collection, 
+    doc, 
+    onSnapshot, 
+    writeBatch,
+    setDoc,
+    addDoc,
+    Timestamp,
+    getDocs,
+    query,
+    where,
+    deleteDoc,
+    orderBy,
+    limit
+} from 'firebase/firestore';
+
+// --- Ícones (SVG como componentes React) ---
+const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
+const AlertTriangleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
+const PieChartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>;
+const CheckCircleIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+const Trash2Icon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const SettingsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>;
+const BotIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>;
+const DownloadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+const FileTextIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg>;
+
+// --- Configuração do Firebase ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+let app, db, auth;
+try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+} catch (e) { console.error("Erro ao inicializar o Firebase:", e); }
+
+// --- Dados Iniciais para Simulação ---
+const funcionariosIniciais = [
+    { matricula: '101', nome: 'Ana Julia', cargo: 'Analista de Marketing', setor: 'Marketing', salario_base: 4500.00, media_variaveis_mensal: 250.00, data_admissao: '2023-03-15', periodo_aquisitivo_inicio: '2024-03-15', periodo_aquisitivo_fim: '2025-03-14', dias_ferias_disponiveis: 30 },
+    { matricula: '102', nome: 'Bruno Cesar', cargo: 'Desenvolvedor Pleno', setor: 'Tecnologia', salario_base: 7200.00, media_variaveis_mensal: 0, data_admissao: '2022-11-10', periodo_aquisitivo_inicio: '2023-11-10', periodo_aquisitivo_fim: '2024-11-09', dias_ferias_disponiveis: 30 },
+    { matricula: '103', nome: 'Carla Dias', cargo: 'Analista Financeiro', setor: 'Financeiro', salario_base: 5100.00, media_variaveis_mensal: 400.00, data_admissao: '2023-01-20', periodo_aquisitivo_inicio: '2024-01-20', periodo_aquisitivo_fim: '2025-01-19', dias_ferias_disponiveis: 30 },
+    { matricula: '104', nome: 'Daniel Alves', cargo: 'Desenvolvedor Sênior', setor: 'Tecnologia', salario_base: 9500.00, media_variaveis_mensal: 800.00, data_admissao: '2021-08-01', periodo_aquisitivo_inicio: '2023-08-01', periodo_aquisitivo_fim: '2024-08-31', dias_ferias_disponiveis: 30 },
+    { matricula: '105', nome: 'Elena Santos', cargo: 'Gerente de Vendas', setor: 'Comercial', salario_base: 8000.00, media_variaveis_mensal: 1500.00, data_admissao: '2022-05-22', periodo_aquisitivo_inicio: '2023-05-22', periodo_aquisitivo_fim: '2024-05-21', dias_ferias_disponiveis: 0 },
+];
+const orcamentoInicial = { "2025-01": 15000, "2025-02": 12000, "2025-03": 10000, "2025-04": 10000, "2025-05": 18000, "2025-06": 20000, "2025-07": 25000, "2025-08": 15000, "2025-09": 10000, "2025-10": 12000, "2025-11": 18000, "2025-12": 30000 };
+const configInicial = {
+    opcoes_dias_ferias: [10, 20, 30],
+    prazo_envio_opcoes: '2025-09-30',
+    datas_blackout: ['2025-12-23', '2025-12-24', '2025-12-26', '2025-12-27']
+};
+const setoresIniciais = [
+    { id: 'Marketing', limite_pessoas: 1, teto_mensal: 5000 },
+    { id: 'Tecnologia', limite_pessoas: 2, teto_mensal: 20000 },
+    { id: 'Financeiro', limite_pessoas: 1, teto_mensal: 6000 },
+    { id: 'Comercial', limite_pessoas: 1, teto_mensal: 10000 },
+];
+
+// --- Funções Utilitárias e de Lógica de Negócio ---
+const dateToISO = (date) => date.toISOString().split('T')[0];
+const addDays = (dateStr, days) => { const d = new Date(dateStr + 'T00:00:00Z'); d.setDate(d.getDate() + days); return dateToISO(d); };
+const diffDays = (d1, d2) => Math.round((new Date(d2) - new Date(d1)) / (1000*60*60*24));
+const formatCurrency = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+const today = dateToISO(new Date());
+
+const calcularCustoTotalPeriodo = (func, dias, abono=0) => {
+    if (!func) return 0;
+    const base = func.salario_base + (func.media_variaveis_mensal || 0);
+    const vFerias = (base/30) * dias;
+    const vTerco = vFerias/3;
+    const vAbono = (base/30) * (abono || 0);
+    const encargos = (vFerias*0.2) + ((vFerias+vTerco)*0.08); // Simulação simplificada de encargos
+    return vFerias + vTerco + vAbono + encargos;
+};
+
+const calcularRateioMensal = (custo, inicio, fim) => {
+    const rateio = {};
+    const dInicio = new Date(inicio + 'T00:00:00Z');
+    const dFim = new Date(fim + 'T00:00:00Z');
+    const totalDias = diffDays(inicio, fim) + 1;
+    if (totalDias <= 0) return {};
+    const custoDiario = custo / totalDias;
+    let dataCorrente = new Date(dInicio);
+    while (dataCorrente <= dFim) {
+        const mesAno = dataCorrente.toISOString().slice(0, 7);
+        if (!rateio[mesAno]) rateio[mesAno] = 0;
+        rateio[mesAno] += custoDiario;
+        dataCorrente.setDate(dataCorrente.getDate() + 1);
+    }
+    return rateio;
+};
+
+
+// --- Componentes de UI ---
+const Card = ({ children, className = '' }) => <div className={`bg-white rounded-lg shadow p-6 ${className}`}>{children}</div>;
+const Button = ({ children, onClick, variant='primary', className='', disabled=false }) => {
+    const styles = {
+        primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
+        secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400',
+        danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+    };
+    return <button onClick={onClick} disabled={disabled} className={`px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles[variant]} ${className}`}>{children}</button>;
+};
+const Input = ({ label, value, onChange, type='text' }) => (
+    <div>
+        <label className="block text-sm font-medium text-gray-700">{label}</label>
+        <input type={type} value={value} onChange={onChange} className="mt-1 block w-full p-2 border rounded-md" />
+    </div>
+);
+
+// --- Componentes de Página ---
+
+// (Os componentes DashboardFuncionario, SolicitacaoFeriasNova, AprovacaoLider, SchedulerPage, PainelRiscos, MasterConfigPage foram mantidos da versão anterior)
+function SolicitacaoFeriasNova({ funcionario, onSave, onCancel }) {
+    const [querAbono, setQuerAbono] = useState(false);
+    const [planoSelecionado, setPlanoSelecionado] = useState(null);
+    const [opcoesPorPeriodo, setOpcoesPorPeriodo] = useState([]);
+
+    const diasParaGozar = funcionario.dias_ferias_disponiveis - (querAbono ? 10 : 0);
+
+    const planosDisponiveis = useMemo(() => {
+        const todosPlanos = [
+            { id: '30', label: '30 dias', periodos: [30], totalDias: 30 },
+            { id: '20_10', label: '20 + 10 dias', periodos: [20, 10], totalDias: 30 },
+            { id: '15_15', label: '15 + 15 dias', periodos: [15, 15], totalDias: 30 },
+            { id: '20', label: '20 dias', periodos: [20], totalDias: 20 },
+        ];
+        return todosPlanos.filter(p => p.totalDias === diasParaGozar);
+    }, [diasParaGozar]);
+
+    const handleAbonoChange = (e) => {
+        const checked = e.target.checked;
+        if (checked && funcionario.dias_ferias_disponiveis < 30) {
+            alert("Abono pecuniário só está disponível para quem tem 30 dias de saldo.");
+            return;
+        }
+        setQuerAbono(checked);
+        setPlanoSelecionado(null);
+        setOpcoesPorPeriodo([]);
+    };
+
+    const handlePlanoChange = (plano) => {
+        setPlanoSelecionado(plano);
+        setOpcoesPorPeriodo(plano.periodos.map(() => ['', '', '']));
+    };
+
+    const handleDateChange = (periodoIndex, opcaoIndex, dateStr) => {
+        if (new Date(dateStr) < new Date(today)) {
+            alert("A data de início não pode ser no passado.");
+            return;
+        }
+        const date = new Date(dateStr + 'T00:00:00Z');
+        const dayOfWeek = date.getUTCDay();
+        if ([5, 6, 0].includes(dayOfWeek)) {
+            alert("O início das férias deve ser de Segunda a Quinta-feira.");
+            return;
+        }
+        
+        const novasOpcoes = JSON.parse(JSON.stringify(opcoesPorPeriodo));
+        novasOpcoes[periodoIndex][opcaoIndex] = dateStr;
+        setOpcoesPorPeriodo(novasOpcoes);
+    };
+
+    const handleSubmit = () => {
+        if (!planoSelecionado) {
+            alert("Por favor, selecione um plano de fracionamento.");
+            return;
+        }
+        const isInvalid = opcoesPorPeriodo.some(opcoes => opcoes.filter(opt => opt !== '').length === 0);
+        if (isInvalid) {
+            alert("Por favor, preencha pelo menos uma opção de data para cada período do plano.");
+            return;
+        }
+
+        const planoParaSalvar = {
+            label: planoSelecionado.label,
+            periodos: planoSelecionado.periodos.map((dias, index) => ({
+                dias: dias,
+                opcoes_inicio: opcoesPorPeriodo[index].filter(d => d)
+            }))
+        };
+        
+        const totalDiasConsumidos = planoSelecionado.totalDias + (querAbono ? 10 : 0);
+
+        onSave({
+            matricula: funcionario.matricula, nomeFuncionario: funcionario.nome,
+            dias_solicitados: totalDiasConsumidos,
+            abono_dias: querAbono ? 10 : 0,
+            plano: planoParaSalvar,
+            status: 'Pendente Análise IA', data_solicitacao: Timestamp.now(),
+        });
+    };
+
+    return (
+        <Card>
+            <h3 className="text-xl font-bold mb-2">Solicitar Férias ({funcionario.dias_ferias_disponiveis} dias restantes)</h3>
+            
+            <div className="mb-6 p-4 border rounded-md bg-gray-50">
+                <label className="flex items-center cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={querAbono}
+                        onChange={handleAbonoChange}
+                        disabled={funcionario.dias_ferias_disponiveis < 30}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <span className="ml-3 text-gray-700">Desejo vender 10 dias das minhas férias (Abono Pecuniário)</span>
+                </label>
+            </div>
+
+            <div className="mb-6">
+                <h4 className="font-semibold text-gray-800 mb-2">
+                    1. Escolha como deseja tirar seus <span className="text-blue-600 font-bold">{diasParaGozar}</span> dias de descanso:
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                    {planosDisponiveis.map(plano => (
+                        <Button key={plano.id} variant={planoSelecionado?.id === plano.id ? 'primary' : 'secondary'}
+                            onClick={() => handlePlanoChange(plano)}>
+                            {plano.label}
+                        </Button>
+                    ))}
+                    {planosDisponiveis.length === 0 && <p className="text-gray-500">Não há planos disponíveis para esta quantidade de dias.</p>}
+                </div>
+            </div>
+
+            {planoSelecionado && planoSelecionado.periodos.map((dias, periodoIndex) => (
+                <div key={periodoIndex} className="mb-6 p-4 border rounded-md bg-gray-50">
+                    <h4 className="font-semibold text-gray-800 mb-2">Período {periodoIndex + 1} ({dias} dias)</h4>
+                    <p className="text-sm text-gray-600 mb-4">Sugira até 3 datas de início (Seg-Qui):</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[0, 1, 2].map(opcaoIndex => (
+                            <input key={opcaoIndex} type="date" min={today}
+                                   value={opcoesPorPeriodo[periodoIndex]?.[opcaoIndex] || ''}
+                                   onChange={e => handleDateChange(periodoIndex, opcaoIndex, e.target.value)}
+                                   className="w-full p-2 border rounded-md"/>
+                        ))}
+                    </div>
+                </div>
+            ))}
+
+            <div className="mt-6 flex justify-between items-center">
+                <Button onClick={handleSubmit} disabled={!planoSelecionado}>Enviar para Análise</Button>
+                <Button onClick={onCancel} variant="secondary">Cancelar</Button>
+            </div>
+        </Card>
+    );
+}
+
+function ProvisaoFinanceira({ solicitacoes, orcamentoData, funcionarios }) {
+    const [mesSelecionado, setMesSelecionado] = useState(new Date().toISOString().slice(0, 7));
+
+    const dadosProvisao = useMemo(() => {
+        const provisionado = {};
+        solicitacoes.filter(s => s.status === 'Aprovado' && s.periodo_final_aprovado).forEach(s => {
+            const func = funcionarios.find(f => f.matricula === s.matricula);
+            if (!func) return;
+
+            // Calcula o custo do abono e provisiona no primeiro dia de férias do primeiro período
+            if (s.abono_dias > 0 && s.periodo_final_aprovado.length > 0) {
+                 const custoAbono = calcularCustoTotalPeriodo(func, 0, s.abono_dias);
+                 const mesAbono = s.periodo_final_aprovado[0].inicio.slice(0, 7);
+                 if(!provisionado[mesAbono]) provisionado[mesAbono] = 0;
+                 provisionado[mesAbono] += custoAbono;
+            }
+
+            s.periodo_final_aprovado.forEach(p => {
+                const diasGozo = diffDays(p.inicio, p.fim) + 1;
+                const custoGozo = calcularCustoTotalPeriodo(func, diasGozo, 0); // Abono já tratado
+                const rateio = calcularRateioMensal(custoGozo, p.inicio, p.fim);
+                for (const [mes, valor] of Object.entries(rateio)) {
+                    if (!provisionado[mes]) provisionado[mes] = 0;
+                    provisionado[mes] += valor;
+                }
+            });
+        });
+        
+        const meses = [...new Set([...Object.keys(orcamentoData), ...Object.keys(provisionado)])].sort();
+        
+        return meses.map(mes => ({
+            mes,
+            orcado: orcamentoData[mes] || 0,
+            prov: provisionado[mes] || 0,
+        }));
+    }, [orcamentoData, solicitacoes, funcionarios]);
+
+    const detalhamentoMes = useMemo(() => {
+        return solicitacoes
+            .filter(s => s.status === 'Aprovado')
+            .map(s => {
+                const func = funcionarios.find(f => f.matricula === s.matricula);
+                let custoNoMes = 0;
+
+                if (s.abono_dias > 0 && s.periodo_final_aprovado.length > 0) {
+                    const mesAbono = s.periodo_final_aprovado[0].inicio.slice(0,7);
+                    if (mesAbono === mesSelecionado) {
+                        custoNoMes += calcularCustoTotalPeriodo(func, 0, s.abono_dias);
+                    }
+                }
+                
+                s.periodo_final_aprovado?.forEach(p => {
+                    const diasGozo = diffDays(p.inicio, p.fim) + 1;
+                    const custoGozo = calcularCustoTotalPeriodo(func, diasGozo, 0);
+                    const rateio = calcularRateioMensal(custoGozo, p.inicio, p.fim);
+                    if(rateio[mesSelecionado]) {
+                        custoNoMes += rateio[mesSelecionado];
+                    }
+                });
+
+                return { ...s, custoNoMes };
+            })
+            .filter(s => s.custoNoMes > 0);
+    }, [solicitacoes, mesSelecionado, funcionarios]);
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <h3 className="text-lg font-bold text-gray-800">Orçado vs. Provisionado</h3>
+                <div className="h-64 mt-4 bg-gray-50 p-2 rounded flex items-end gap-2">
+                    {dadosProvisao.slice(-12).map(({mes, orcado, prov}) => (
+                        <div key={mes} className="flex-1 flex flex-col items-center justify-end group cursor-pointer" onClick={() => setMesSelecionado(mes)}>
+                            <div className="text-xs text-center mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <p className="font-bold">{formatCurrency(prov)}</p>
+                                <p className="text-blue-600">{formatCurrency(orcado)}</p>
+                            </div>
+                            <div className="relative w-full h-full flex items-end">
+                                <div className="absolute bottom-0 w-full bg-blue-200" style={{height: `100%`}}></div>
+                                <div className={`absolute bottom-0 w-full ${prov > orcado ? 'bg-red-400' : 'bg-green-400'}`} style={{height: `${Math.min(100, (prov / (orcado || 1)) * 100)}%`}}></div>
+                            </div>
+                            <span className={`text-xs mt-1 font-semibold ${mes === mesSelecionado ? 'text-blue-600' : ''}`}>{mes.slice(5,7)}/{mes.slice(2,4)}</span>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+
+            <Card>
+                <h3 className="text-lg font-bold text-gray-800">Detalhamento da Provisão para {mesSelecionado}</h3>
+                 <div className="overflow-x-auto mt-4">
+                    <table className="min-w-full bg-white text-sm">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="p-3 text-left">Colaborador</th>
+                                <th className="p-3 text-left">Período de Férias</th>
+                                <th className="p-3 text-left">Custo no Mês</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                        {detalhamentoMes.map(s => (
+                             <tr key={s.id}>
+                                <td className="p-3">{s.nomeFuncionario}</td>
+                                <td className="p-3">{s.periodo_final_aprovado.map(p => `${p.inicio} a ${p.fim}`).join(', ')}</td>
+                                <td className="p-3 font-semibold">{formatCurrency(s.custoNoMes)}</td>
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+function CronogramaVisual({ solicitacoes, funcionarios }) {
+    const [data, setData] = useState(new Date());
+    const [filtroSetor, setFiltroSetor] = useState('todos');
+
+    const diasNoMes = new Date(data.getFullYear(), data.getMonth() + 1, 0).getDate();
+    const primeiroDiaSemana = new Date(data.getFullYear(), data.getMonth(), 1).getDay(); // 0=Dom, 1=Seg
+    
+    const feriasDoMes = solicitacoes
+        .filter(s => s.status === 'Aprovado' && (filtroSetor === 'todos' || funcionarios.find(f => f.matricula === s.matricula)?.setor === filtroSetor))
+        .filter(s => s.periodo_final_aprovado?.some(p => p.inicio.slice(0, 7) === data.toISOString().slice(0, 7) || p.fim.slice(0, 7) === data.toISOString().slice(0, 7)));
+
+    return (
+        <Card>
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                    <Button onClick={() => setData(new Date(data.setMonth(data.getMonth() - 1)))} variant="secondary">{"<"}</Button>
+                    <h2 className="text-xl font-bold text-center w-48">{data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</h2>
+                    <Button onClick={() => setData(new Date(data.setMonth(data.getMonth() + 1)))} variant="secondary">{">"}</Button>
+                </div>
+                <select value={filtroSetor} onChange={e => setFiltroSetor(e.target.value)} className="p-2 border rounded-md text-sm">
+                    <option value="todos">Todos os Setores</option>
+                    {[...new Set(funcionarios.map(f => f.setor))].sort().map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center font-bold text-sm text-gray-600">
+                <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+            </div>
+            <div className="grid grid-cols-7 gap-1 mt-2">
+                {Array.from({ length: primeiroDiaSemana }).map((_, i) => <div key={`empty-${i}`}></div>)}
+                {Array.from({ length: diasNoMes }).map((_, dia) => (
+                    <div key={dia} className="h-24 bg-gray-50 border rounded-md p-1 overflow-y-auto">
+                        <span className="font-semibold">{dia + 1}</span>
+                        {feriasDoMes.map(s => s.periodo_final_aprovado.map(p => {
+                            const diaAtual = new Date(data.getFullYear(), data.getMonth(), dia + 2);
+                            if(diaAtual >= new Date(p.inicio) && diaAtual <= new Date(p.fim + 'T23:59:59Z')) {
+                                return <div key={`${s.id}-${p.inicio}`} className="text-xs bg-blue-200 text-blue-800 rounded px-1 mt-1 truncate">{s.nomeFuncionario}</div>;
+                            }
+                            return null;
+                        }))}
+                    </div>
+                ))}
+            </div>
+        </Card>
+    );
+}
+
+function ExportacaoPage({ solicitacoes, funcionarios }) {
+    const handleExport = () => {
+        const header = "matricula,nome,setor,data_inicio,data_fim,dias_gozo,abono_dias\n";
+        const rows = solicitacoes
+            .filter(s => s.status === 'Aprovado')
+            .flatMap(s => {
+                const func = funcionarios.find(f => f.matricula === s.matricula);
+                return s.periodo_final_aprovado.map(p => {
+                    const diasGozo = diffDays(p.inicio, p.fim) + 1;
+                    return [s.matricula, `"${func?.nome}"`, func?.setor, p.inicio, p.fim, diasGozo, s.abono_dias].join(',');
+                });
+            })
+            .join('\n');
+        
+        const csv = header + rows;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "cronograma_ferias.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    return (
+        <Card>
+            <h2 className="text-xl font-bold mb-4">Relatórios & Exportação</h2>
+            <Button onClick={handleExport} className="flex items-center gap-2">
+                <DownloadIcon /> Exportar Cronograma para CSV (Folha)
+            </Button>
+        </Card>
+    );
+}
+
+function LogsPage({ logs }) {
+    return (
+        <Card>
+            <h2 className="text-xl font-bold mb-4">Logs de Auditoria</h2>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+                {logs.map(log => (
+                    <div key={log.id} className="text-sm p-2 bg-gray-50 rounded">
+                        <span className="font-semibold text-blue-600">{new Date(log.timestamp?.toDate()).toLocaleString('pt-BR')}</span> - 
+                        <span className="font-bold"> {log.user}: </span> {log.action}
+                    </div>
+                ))}
+            </div>
+        </Card>
+    )
+}
+
+function DashboardFuncionario({ setPage, funcionario, solicitacoes, config }) {
+    const minhasSolicitacoes = solicitacoes.filter(s => s.matricula === funcionario.matricula);
+    return (
+        <div>
+            <div className="p-4 bg-blue-100 text-blue-800 rounded-lg mb-6 flex items-center gap-4">
+                <span className="font-bold">AVISO:</span>
+                <p>Você tem até o dia <span className="font-bold">{config.prazo_envio_opcoes}</span> para cadastrar suas opções de férias. Após essa data, o sistema poderá alocar suas férias automaticamente.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="md:col-span-2">
+                    <h3 className="text-xl font-bold">Minhas Férias</h3>
+                    <p className="mt-2 text-gray-600">
+                        Você tem <span className="font-bold text-blue-600 text-lg">{funcionario.dias_ferias_disponiveis}</span> dias de férias disponíveis.
+                    </p>
+                    <p className="text-sm text-gray-500">Período Aquisitivo: {funcionario.periodo_aquisitivo_inicio} a {funcionario.periodo_aquisitivo_fim}</p>
+                    <Button onClick={() => setPage('solicitarFerias')} className="mt-6" disabled={funcionario.dias_ferias_disponiveis <= 0}>Solicitar Férias</Button>
+                </Card>
+                <Card>
+                    <h3 className="text-lg font-bold">Minhas Solicitações</h3>
+                    <ul className="mt-4 space-y-3">
+                        {minhasSolicitacoes.map(s => (
+                            <li key={s.id} className="p-3 bg-gray-50 rounded-md">
+                               <div className="flex justify-between items-center">
+                                    <p className="text-sm font-semibold">{s.plano?.label || `${s.dias_solicitados} dias`}</p>
+                                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${ s.status === 'Aprovado' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }`}>{s.status}</span>
+                               </div>
+                               {s.abono_dias > 0 && <p className="text-xs text-blue-600 font-bold">Inclui Abono Pecuniário</p>}
+                               {s.periodo_final_aprovado?.map((p, idx) => (
+                                    <p key={idx} className="text-xs text-green-700 mt-1">Período {idx+1}: {p.inicio}</p>
+                               ))}
+                            </li>
+                        ))}
+                    </ul>
+                </Card>
+            </div>
+        </div>
+    );
+}
+
+function AprovacaoLider({ solicitacoes, onUpdateSolicitacao, onGeneratePdf }) {
+    const pendentes = solicitacoes.filter(s => s.status === 'Pendente Aprovação Líder');
+    const aprovados = solicitacoes.filter(s => s.status === 'Aprovado');
+    
+    const renderPeriodos = (s) => (
+        <>
+            {s.periodo_final_aprovado?.map((p, idx) => (
+                <p key={idx} className="text-sm text-blue-700">
+                    Período {idx + 1}: {p.inicio} a {p.fim}
+                </p>
+            ))}
+            {s.abono_dias > 0 && <p className="text-sm font-bold text-blue-800">+ {s.abono_dias} dias de Abono</p>}
+        </>
+    );
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <h2 className="text-xl font-bold mb-4">Aprovações Finais Pendentes</h2>
+                <div className="space-y-4">
+                {pendentes.length === 0 ? <p>Nenhuma solicitação para aprovar.</p> : pendentes.map(s => (
+                    <div key={s.id} className="p-3 bg-gray-100 rounded-md flex justify-between items-center">
+                        <div>
+                            <p className="font-semibold">{s.nomeFuncionario} ({s.plano?.label})</p>
+                            {renderPeriodos(s)}
+                        </div>
+                        <div className="flex gap-2">
+                             <Button onClick={() => onUpdateSolicitacao(s.id, { status: 'Aprovado' })}>Aprovar</Button>
+                             <Button variant="danger" onClick={() => onUpdateSolicitacao(s.id, { status: 'Reprovado', periodo_final_aprovado: null })}>Reprovar</Button>
+                        </div>
+                    </div>
+                ))}
+                </div>
+            </Card>
+             <Card>
+                <h2 className="text-xl font-bold mb-4">Férias Aprovadas</h2>
+                 <div className="space-y-4">
+                {aprovados.length === 0 ? <p>Nenhuma férias aprovada.</p> : aprovados.map(s => (
+                    <div key={s.id} className="p-3 bg-green-50 rounded-md flex justify-between items-center">
+                        <div>
+                            <p className="font-semibold">{s.nomeFuncionario}</p>
+                            {s.periodo_final_aprovado?.map((p, idx) => <p key={idx} className="text-sm text-green-800">Período {idx+1}: {p.inicio} a {p.fim}</p>)}
+                            {s.abono_dias > 0 && <p className="text-sm font-bold text-green-900">+ {s.abono_dias} dias de Abono</p>}
+                        </div>
+                        <Button onClick={() => onGeneratePdf(s)} variant="secondary">Gerar Aviso PDF</Button>
+                    </div>
+                ))}
+                 </div>
+            </Card>
+        </div>
+    );
+}
+
+function SchedulerPage({ onRunScheduler }) {
+    const [loading, setLoading] = useState(false);
+    const [result, setResult] = useState(null);
+    const handleRun = async () => {
+        setLoading(true); setResult(null);
+        try { const res = await onRunScheduler(); setResult(res); }
+        catch(e) { setResult({ success: false, message: e.message }); }
+        setLoading(false);
+    };
+    return (
+        <Card>
+            <div className="flex items-center gap-4">
+                <BotIcon className="w-10 h-10 text-blue-600"/>
+                <div>
+                    <h2 className="text-xl font-bold">Agendador Inteligente de Férias</h2>
+                    <p className="text-gray-600">Execute o agendador para analisar as opções e criar um cronograma otimizado.</p>
+                </div>
+            </div>
+            <Button onClick={handleRun} disabled={loading} className="mt-4">{loading ? 'Processando...' : 'Executar Agendador'}</Button>
+            {result && <div className={`mt-4 p-3 rounded-md text-sm ${result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{result.message}</div>}
+        </Card>
+    );
+}
+
+function PainelRiscos({ funcionarios, solicitacoes }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [filtroSetor, setFiltroSetor] = useState('todos');
+
+    const funcionariosComRisco = useMemo(() => {
+        return funcionarios.map(f => {
+            const dataLimiteGozo = addDays(f.periodo_aquisitivo_fim, 335); // Período Concessivo (11 meses)
+            const diasParaVencer = diffDays(today, dataLimiteGozo);
+            const minhasSolicitacoes = solicitacoes.filter(s => s.matricula === f.matricula);
+            const temAgendamento = minhasSolicitacoes.some(s => s.status === 'Aprovado');
+            const temPendente = minhasSolicitacoes.some(s => s.status.startsWith('Pendente'));
+            
+            let statusRisco = 'ok';
+            let corRisco = 'bg-green-100 text-green-800';
+            if (temAgendamento) {
+                statusRisco = 'Confirmado';
+            } else if (diasParaVencer <= 60 && diasParaVencer > 0) {
+                statusRisco = 'Vencendo';
+                corRisco = 'bg-red-100 text-red-800';
+            } else if (diasParaVencer <= 0) {
+                statusRisco = 'VENCIDO';
+                corRisco = 'bg-red-700 text-white animate-pulse';
+            } else if (temPendente) {
+                statusRisco = 'Pendente';
+                corRisco = 'bg-yellow-100 text-yellow-800';
+            } else {
+                 statusRisco = 'Sem Risco';
+            }
+            return { ...f, diasParaVencer, temAgendamento, temPendente, statusRisco, corRisco };
+        }).sort((a, b) => a.diasParaVencer - b.diasParaVencer);
+    }, [funcionarios, solicitacoes]);
+
+    const setoresUnicos = [...new Set(funcionarios.map(f => f.setor))];
+    const filtrados = funcionariosComRisco.filter(f => filtroSetor === 'todos' || f.setor === filtroSetor);
+    const vencendoSemAgendamento = filtrados.filter(f => f.statusRisco === 'Vencendo' || f.statusRisco === 'VENCIDO');
+    const pendentes = filtrados.filter(f => f.statusRisco === 'Pendente');
+    const confirmados = filtrados.filter(f => f.statusRisco === 'Confirmado');
+    const semRisco = filtrados.filter(f => f.statusRisco === 'Sem Risco');
+
+    const renderFuncionarioCard = (f) => (
+        <div key={f.matricula} className="p-3 border rounded-md flex justify-between items-center">
+            <div>
+                <p className="font-semibold">{f.nome}</p>
+                <p className="text-sm text-gray-500">{f.setor} - Saldo: {f.dias_ferias_disponiveis} dias</p>
+                {(f.statusRisco === 'Vencendo' || f.statusRisco === 'VENCIDO') && <p className="text-xs text-red-600">Vence em {f.diasParaVencer} dias</p>}
+            </div>
+            <span className={`px-2 py-1 text-xs font-bold rounded-full ${f.corRisco}`}>{f.statusRisco}</span>
+        </div>
+    );
+
+    return (
+        <Card>
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Painel de Riscos e Alertas</h2>
+                <div className="flex gap-4">
+                     <select value={filtroSetor} onChange={e => setFiltroSetor(e.target.value)} className="p-2 border rounded-md text-sm">
+                        <option value="todos">Todos os Setores</option>
+                        {setoresUnicos.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <Button onClick={() => setIsExpanded(!isExpanded)} variant="secondary">
+                        {isExpanded ? 'Ver Menos' : 'Expandir Visão'}
+                    </Button>
+                </div>
+            </div>
+            <div className="space-y-4">
+                {vencendoSemAgendamento.length > 0 && (
+                    <div>
+                        <h3 className="font-bold text-red-600 mb-2">Vencendo ou Vencido (Sem Agendamento)</h3>
+                        <div className="space-y-2">{vencendoSemAgendamento.map(renderFuncionarioCard)}</div>
+                    </div>
+                )}
+                {isExpanded && (
+                    <>
+                        {pendentes.length > 0 && <div className="mt-6"><h3 className="font-bold text-yellow-600 mb-2">Solicitações Pendentes</h3><div className="space-y-2">{pendentes.map(renderFuncionarioCard)}</div></div>}
+                        {confirmados.length > 0 && <div className="mt-6"><h3 className="font-bold text-green-600 mb-2">Férias Confirmadas</h3><div className="space-y-2">{confirmados.map(renderFuncionarioCard)}</div></div>}
+                        {semRisco.length > 0 && <div className="mt-6"><h3 className="font-bold text-gray-600 mb-2">Sem Risco Imediato</h3><div className="space-y-2">{semRisco.map(renderFuncionarioCard)}</div></div>}
+                    </>
+                )}
+                 {vencendoSemAgendamento.length === 0 && !isExpanded && <p className="text-green-700">Nenhum risco crítico de vencimento de férias encontrado!</p>}
+            </div>
+        </Card>
+    );
+}
+
+function MasterConfigPage({ config, setores, onSaveConfig, onSaveSetor, onDeleteSetor }) {
+    const [nome, setNome] = useState('');
+    const [limite, setLimite] = useState(1);
+    const [teto, setTeto] = useState(0);
+
+    const handleAddSetor = () => {
+        if (!nome) return alert("O nome do setor é obrigatório.");
+        onSaveSetor({ id: nome, limite_pessoas: Number(limite), teto_mensal: Number(teto) });
+        setNome(''); setLimite(1); setTeto(0);
+    };
+
+    const [dataBlackout, setDataBlackout] = useState('');
+    const handleAddBlackout = () => {
+        if (!dataBlackout) return;
+        const newBlackout = [...(config.datas_blackout || []), dataBlackout];
+        onSaveConfig({ ...config, datas_blackout: newBlackout });
+        setDataBlackout('');
+    };
+    const handleRemoveBlackout = (dateToRemove) => {
+        const newBlackout = (config.datas_blackout || []).filter(d => d !== dateToRemove);
+        onSaveConfig({ ...config, datas_blackout: newBlackout });
+    };
+
+    return (
+        <div className="space-y-6">
+            <Card>
+            <h3 className="text-lg font-bold mb-4">Configuração de Setores</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-6 p-4 border rounded-md bg-gray-50">
+                <Input label="Novo Setor" value={nome} onChange={e => setNome(e.target.value)} />
+                <Input label="Limite Pessoas" value={limite} onChange={e => setLimite(e.target.value)} type="number" />
+                <Input label="Teto Mensal (Opcional)" value={teto} onChange={e => setTeto(e.target.value)} type="number" />
+                <Button onClick={handleAddSetor}>Adicionar</Button>
+            </div>
+            <ul className="space-y-2">
+                {setores.map(s => (
+                    <li key={s.id} className="flex justify-between items-center p-2 bg-gray-100 rounded">
+                        <span className="font-semibold">{s.id}</span>
+                        <span>Limite: {s.limite_pessoas} | Teto: {formatCurrency(s.teto_mensal)}</span>
+                        <Button onClick={() => onDeleteSetor(s.id)} variant="danger"><Trash2Icon /></Button>
+                    </li>
+                ))}
+            </ul>
+        </Card>
+        <Card>
+            <h3 className="text-lg font-bold mb-4">Datas de Blackout</h3>
+             <div className="flex gap-4 items-end mb-4">
+                <Input label="Adicionar Data" type="date" value={dataBlackout} onChange={e => setDataBlackout(e.target.value)} />
+                <Button onClick={handleAddBlackout}>Adicionar</Button>
+            </div>
+            <ul className="space-y-2">
+                {(config.datas_blackout || []).map(d => (
+                    <li key={d} className="flex justify-between items-center p-2 bg-gray-100 rounded">
+                        <span>{d}</span>
+                        <Button onClick={() => handleRemoveBlackout(d)} variant="danger">Remover</Button>
+                    </li>
+                ))}
+            </ul>
+        </Card>
+        </div>
+    );
+}
+
+// --- Componente Principal ---
+export default function App() {
+    const [page, setPage] = useState('home');
+    const [userType, setUserType] = useState('master');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+    
+    // Estados da aplicação
+    const [funcionarios, setFuncionarios] = useState([]);
+    const [solicitacoes, setSolicitacoes] = useState([]);
+    const [config, setConfig] = useState(configInicial);
+    const [setores, setSetores] = useState([]);
+    const [selectedFuncionario, setSelectedFuncionario] = useState(null);
+    const [logs, setLogs] = useState([]);
+    const [orcamentoData, setOrcamentoData] = useState(orcamentoInicial);
+
+
+    // --- Lógica de Autenticação e Carregamento de Dados ---
+    useEffect(() => {
+        if (!auth) { setError("Firebase não inicializado."); setLoading(false); return; }
+        const unsubAuth = onAuthStateChanged(auth, async user => {
+            if (user) { setIsAuthReady(true); } 
+            else {
+                try {
+                    if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                    else await signInAnonymously(auth);
+                } catch (err) { setError("Falha ao autenticar."); }
+            }
+        });
+        return unsubAuth;
+    }, []);
+
+    const dataLoadedRef = React.useRef(false);
+    const seedInitialData = useCallback(async () => {
+        if (!db) return;
+        const batch = writeBatch(db);
+        const logAction = (action) => batch.set(doc(collection(db, `artifacts/${appId}/public/data/logs`)), { action, timestamp: Timestamp.now(), user: 'Sistema' });
+
+        funcionariosIniciais.forEach(f => batch.set(doc(db, `artifacts/${appId}/public/data/funcionarios`, f.matricula), f));
+        setoresIniciais.forEach(s => batch.set(doc(db, `artifacts/${appId}/public/data/setores`, s.id), s));
+        batch.set(doc(db, `artifacts/${appId}/public/data/configuracoes`, "parametros"), configInicial);
+        batch.set(doc(db, `artifacts/${appId}/public/data/orcamento`, "geral"), orcamentoInicial);
+        logAction("Dados iniciais populados no sistema.");
+        await batch.commit();
+    }, []);
+
+    useEffect(() => {
+        if (!isAuthReady || !db) return;
+        
+        const unsubConfig = onSnapshot(doc(db, `artifacts/${appId}/public/data/configuracoes`, "parametros"), (doc) => {
+            if (doc.exists()) { setConfig(doc.data()); } 
+            else if (!dataLoadedRef.current) { seedInitialData(); }
+        });
+        const unsubOrcamento = onSnapshot(doc(db, `artifacts/${appId}/public/data/orcamento`, "geral"), (doc) => {
+             if (doc.exists()) { setOrcamentoData(doc.data()); }
+        });
+        const unsubFunc = onSnapshot(collection(db, `artifacts/${appId}/public/data/funcionarios`), snap => {
+            setFuncionarios(snap.docs.map(d => ({...d.data() })));
+            if(!snap.empty) dataLoadedRef.current = true;
+        });
+        const unsubSoli = onSnapshot(collection(db, `artifacts/${appId}/public/data/solicitacoes`), snap => setSolicitacoes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubSetores = onSnapshot(collection(db, `artifacts/${appId}/public/data/setores`), snap => setSetores(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const qLogs = query(collection(db, `artifacts/${appId}/public/data/logs`), orderBy('timestamp', 'desc'), limit(50));
+        const unsubLogs = onSnapshot(qLogs, snap => setLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))));
+
+        setLoading(false);
+        return () => { unsubConfig(); unsubFunc(); unsubSoli(); unsubSetores(); unsubLogs(); unsubOrcamento(); };
+    }, [isAuthReady, seedInitialData]);
+    
+    // --- Handlers de Ações ---
+    const logAction = async (action, details = {}) => {
+        await addDoc(collection(db, `artifacts/${appId}/public/data/logs`), { action, details, timestamp: Timestamp.now(), user: userType });
+    };
+
+    const handleSaveConfig = async (newConfig) => {
+        await setDoc(doc(db, `artifacts/${appId}/public/data/configuracoes`, "parametros"), newConfig);
+        await logAction("Configurações gerais atualizadas.");
+    };
+    const handleSaveSetor = async (setor) => {
+        await setDoc(doc(db, `artifacts/${appId}/public/data/setores`, setor.id), setor);
+        await logAction(`Setor '${setor.id}' salvo/atualizado.`);
+    };
+    const handleDeleteSetor = async (id) => {
+        if (confirm(`Tem certeza que deseja remover o setor '${id}'?`)) {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/setores`, id));
+            await logAction(`Setor '${id}' removido.`);
+        }
+    };
+    const handleSaveSolicitacao = async (data) => {
+        await addDoc(collection(db, `artifacts/${appId}/public/data/solicitacoes`), data);
+        await logAction(`Nova solicitação de férias para ${data.nomeFuncionario}.`);
+        setPage('home');
+    };
+    
+    const handleUpdateSolicitacao = async (id, updates) => {
+        const solicitacaoRef = doc(db, `artifacts/${appId}/public/data/solicitacoes`, id);
+        const solicitacao = solicitacoes.find(s => s.id === id);
+        if (!solicitacao) return alert("Erro: Solicitação não encontrada.");
+        
+        if (updates.status === 'Aprovado') {
+            const funcionario = funcionarios.find(f => f.matricula === solicitacao.matricula);
+            if (!funcionario) return alert("Erro: Funcionário não encontrado.");
+            
+            const diasSolicitados = solicitacao.dias_solicitados;
+            const novosDiasDisponiveis = funcionario.dias_ferias_disponiveis - diasSolicitados;
+            if (novosDiasDisponiveis < 0) return alert(`Erro: Saldo de férias insuficiente para ${funcionario.nome}.`);
+
+            const batch = writeBatch(db);
+            batch.update(solicitacaoRef, updates);
+            batch.update(doc(db, `artifacts/${appId}/public/data/funcionarios`, funcionario.matricula), { dias_ferias_disponiveis: novosDiasDisponiveis });
+            await batch.commit();
+            await logAction(`Solicitação de ${funcionario.nome} APROVADA.`);
+        } else {
+            await setDoc(solicitacaoRef, updates, { merge: true });
+            await logAction(`Solicitação ${solicitacao.nomeFuncionario} atualizada para ${updates.status}.`);
+        }
+    };
+
+    const handleRunScheduler = async () => {
+        const pendentesQuery = query(collection(db, `artifacts/${appId}/public/data/solicitacoes`), where("status", "==", "Pendente Análise IA"));
+        const pendentesSnap = await getDocs(pendentesQuery);
+        const pendentes = pendentesSnap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (a.data_solicitacao?.toDate() || 0) - (b.data_solicitacao?.toDate() || 0) );
+        
+        let agendadosCount = 0;
+        const batch = writeBatch(db);
+        const feriasAprovadas = solicitacoes.filter(s => s.status === 'Aprovado');
+
+        for (const s of pendentes) {
+            if (!s.plano || !s.plano.periodos) continue;
+            
+            let melhoresOpcoes = [];
+            let falha = false;
+
+            for (const periodo of s.plano.periodos) {
+                let melhorOpcao = null;
+                let menorScore = Infinity;
+
+                for (const inicio of periodo.opcoes_inicio) {
+                    let score = 0;
+                    const fim = addDays(inicio, periodo.dias - 1);
+                    
+                    if (config.datas_blackout?.some(d => d >= inicio && d <= fim)) {
+                        score = Infinity;
+                        continue;
+                    }
+
+                    const func = funcionarios.find(f => f.matricula === s.matricula);
+                    const setorInfo = setores.find(set => set.id === func.setor);
+                    const limiteSetor = setorInfo?.limite_pessoas || 1;
+                    
+                    let colisoes = 0;
+                    feriasAprovadas.filter(fa => funcionarios.find(f => f.matricula === fa.matricula)?.setor === func.setor)
+                        .forEach(fa => fa.periodo_final_aprovado.forEach(p => {
+                            if (inicio <= p.fim && fim >= p.inicio) colisoes++;
+                        }));
+                    
+                    if(colisoes >= limiteSetor) score += 1000;
+
+                    if(score < menorScore) {
+                        menorScore = score;
+                        melhorOpcao = { inicio, fim };
+                    }
+                }
+                
+                if (melhorOpcao) {
+                    melhoresOpcoes.push(melhorOpcao);
+                } else {
+                    falha = true;
+                    break;
+                }
+            }
+            
+            if (!falha) {
+                batch.update(doc(db, `artifacts/${appId}/public/data/solicitacoes`, s.id), {
+                    status: 'Pendente Aprovação Líder',
+                    periodo_final_aprovado: melhoresOpcoes,
+                });
+                agendadosCount++;
+            } else {
+                 batch.update(doc(db, `artifacts/${appId}/public/data/solicitacoes`, s.id), { status: 'Requer Ação Manual' });
+            }
+        }
+        await batch.commit();
+        await logAction(`Agendador IA executado. ${agendadosCount} solicitações pré-agendadas.`);
+        return { success: true, message: `${agendadosCount} solicitações foram pré-agendadas.` };
+    };
+
+    const handleGeneratePdf = (solicitacao) => {
+        const { jsPDF } = window.jspdf;
+        const funcionario = funcionarios.find(f => f.matricula === solicitacao.matricula);
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text("AVISO DE FÉRIAS", 105, 20, { align: 'center' });
+        doc.setFontSize(12);
+        doc.text(`Prezado(a) ${funcionario.nome},`, 20, 40);
+        doc.text(`Matrícula: ${funcionario.matricula}`, 20, 50);
+        doc.text(`Setor: ${funcionario.setor}`, 20, 60);
+        doc.text(`Comunicamos que suas férias foram programadas conforme abaixo:`, 20, 80);
+        
+        let yPos = 90;
+        solicitacao.periodo_final_aprovado.forEach((p, idx) => {
+            const periodoDias = diffDays(p.inicio, p.fim) + 1;
+            doc.text(`Período ${idx+1}: ${p.inicio} a ${p.fim} (${periodoDias} dias de gozo)`, 20, yPos);
+            yPos += 10;
+        });
+        
+        if (solicitacao.abono_dias > 0) {
+            doc.text(`Adicionalmente, foi aprovada a conversão de ${solicitacao.abono_dias} dias em abono pecuniário.`, 20, yPos);
+            yPos += 10;
+        }
+
+        doc.text(`Total de dias debitados do saldo: ${solicitacao.dias_solicitados}`, 20, yPos + 10);
+        doc.text(`São Paulo, ${new Date().toLocaleDateString('pt-BR')}.`, 20, yPos + 40);
+        doc.save(`aviso_ferias_${funcionario.matricula}.pdf`);
+        logAction(`Gerado PDF de aviso de férias para ${funcionario.nome}.`);
+    };
+
+    // --- Renderização ---
+    const renderPage = () => {
+        if (loading) return <div>Carregando...</div>;
+        if (error) return <div className="text-red-500 p-4">{error}</div>;
+
+        if (userType === 'funcionario') {
+            const func = selectedFuncionario || funcionarios[0];
+            if (!func) return <p>Selecione um funcionário para simular.</p>;
+            switch(page) {
+                case 'home': return <DashboardFuncionario setPage={setPage} funcionario={func} solicitacoes={solicitacoes} config={config} />;
+                case 'solicitarFerias': return <SolicitacaoFeriasNova funcionario={func} onSave={handleSaveSolicitacao} onCancel={() => setPage('home')} />;
+                default: setPage('home');
+            }
+        }
+        
+        switch(page) {
+            case 'home': return <AprovacaoLider solicitacoes={solicitacoes} onUpdateSolicitacao={handleUpdateSolicitacao} onGeneratePdf={handleGeneratePdf}/>;
+            case 'scheduler': return <SchedulerPage onRunScheduler={handleRunScheduler} />;
+            case 'cronograma': return <CronogramaVisual solicitacoes={solicitacoes} funcionarios={funcionarios} />;
+            case 'riscos': return <PainelRiscos funcionarios={funcionarios} solicitacoes={solicitacoes} />;
+            case 'provisao': return <ProvisaoFinanceira solicitacoes={solicitacoes} orcamentoData={orcamentoData} funcionarios={funcionarios} />;
+            case 'export': return <ExportacaoPage solicitacoes={solicitacoes} funcionarios={funcionarios} />;
+            case 'logs': return <LogsPage logs={logs} />;
+            case 'config': return userType === 'master' ? <MasterConfigPage config={config} setores={setores} onSaveConfig={handleSaveConfig} onSaveSetor={handleSaveSetor} onDeleteSetor={handleDeleteSetor} /> : <p>Acesso negado.</p>;
+            default: setPage('home');
+        }
+    };
+    
+    const navLinks = [
+        { key: 'home', label: 'Aprovações', icon: <CheckCircleIcon className="w-5 h-5"/>, roles: ['rh', 'master'] },
+        { key: 'scheduler', label: 'Agendador IA', icon: <BotIcon />, roles: ['rh', 'master'] },
+        { key: 'cronograma', label: 'Cronograma Visual', icon: <CalendarIcon />, roles: ['rh', 'master'] },
+        { key: 'riscos', label: 'Painel de Riscos', icon: <AlertTriangleIcon />, roles: ['rh', 'master'] },
+        { key: 'provisao', label: 'Provisão Financeira', icon: <PieChartIcon />, roles: ['rh', 'master'] },
+        { key: 'export', label: 'Relatórios', icon: <DownloadIcon />, roles: ['rh', 'master'] },
+        { key: 'logs', label: 'Logs de Auditoria', icon: <FileTextIcon />, roles: ['rh', 'master'] },
+        { key: 'config', label: 'Parâmetros', icon: <SettingsIcon />, roles: ['master'] },
+    ];
+
+    return (
+        <div className="bg-gray-100 min-h-screen font-sans text-gray-900">
+            <header className="bg-white shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+                    <h1 className="text-2xl font-bold text-gray-800">Gestão de Férias Inteligente</h1>
+                    <div className="flex items-center gap-4">
+                        <select value={userType} onChange={e => { setUserType(e.target.value); setPage('home'); }} className="p-2 border rounded-md">
+                            <option value="master">Master</option>
+                            <option value="rh">RH</option>
+                            <option value="funcionario">Funcionário</option>
+                        </select>
+                        {userType === 'funcionario' && (
+                            <select value={selectedFuncionario?.matricula || ''} onChange={e => setSelectedFuncionario(funcionarios.find(f => f.matricula === e.target.value))} className="p-2 border rounded-md text-sm">
+                                <option value="">Selecione...</option>
+                                {funcionarios.map(f => <option key={f.matricula} value={f.matricula}>{f.nome}</option>)}
+                            </select>
+                        )}
+                    </div>
+                </div>
+            </header>
+            
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-8">
+                {userType !== 'funcionario' && (
+                    <aside className="w-1/4">
+                        <nav className="space-y-2">
+                            {navLinks.filter(l => l.roles.includes(userType)).map(link => (
+                                <button key={link.key} onClick={() => setPage(link.key)} 
+                                    className={`w-full flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-md ${page === link.key ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+                                    {link.icon}
+                                    {link.label}
+                                </button>
+                            ))}
+                        </nav>
+                    </aside>
+                )}
+                <main className={userType !== 'funcionario' ? 'w-3/4' : 'w-full'}>
+                    {renderPage()}
+                </main>
+            </div>
+        </div>
+    );
+}
