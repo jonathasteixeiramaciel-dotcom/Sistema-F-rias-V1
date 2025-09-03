@@ -1,0 +1,1829 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { 
+    getFirestore, 
+    collection, 
+    doc, 
+    onSnapshot, 
+    writeBatch,
+    setDoc,
+    addDoc,
+    Timestamp,
+    getDocs,
+    query,
+    where,
+    deleteDoc,
+    orderBy,
+    limit,
+    updateDoc
+} from 'firebase/firestore';
+
+// --- Ícones (SVG como componentes React) ---
+const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
+const AlertTriangleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
+const PieChartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>;
+const CheckCircleIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+const Trash2Icon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const SettingsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>;
+const BotIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>;
+const DownloadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+const FileTextIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg>;
+const BrainCircuitIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5a3 3 0 1 0-5.993.142"/><path d="M12 5a3 3 0 1 1 5.993.142"/><path d="M5 8.5A3.5 3.5 0 0 0 8.5 12h7A3.5 3.5 0 0 0 19 8.5a3.5 3.5 0 0 0-3.5-3.5h-1"/><path d="M5 8.5A3.5 3.5 0 0 1 8.5 5h1"/><path d="M12 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path d="M12 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0Z"/><path d="M14 12h.5"/><path d="M17 12h.5"/><path d="M19 12h.5"/><path d="M21.5 12h.5"/><path d="M9.5 12H9"/><path d="M7 12H6.5"/><path d="M4.5 12H4"/><path d="M2 12h-.5"/><path d="M12 14v.5"/><path d="M12 17v.5"/><path d="M12 19v.5"/><path d="M12 21.5v.5"/><path d="M12 9.5V9"/><path d="M12 7V6.5"/><path d="M12 4.5V4"/><path d="M12 2v-.5"/></svg>;
+const UploadCloudIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>;
+const UserMinusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>;
+const UsersIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+const UserPlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>;
+const EditIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-edit"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
+
+
+// --- Configuração do Firebase ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+let app, db, auth;
+try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+} catch (e) { console.error("Erro ao inicializar o Firebase:", e); }
+
+// --- Dados Iniciais para Simulação ---
+const funcionariosIniciais = [
+    { matricula: '101', nome: 'Ana Julia', cargo: 'Analista de Marketing', setor: 'Marketing', salario_base: 4500.00, media_variaveis_mensal: 250.00, data_admissao: '2023-03-15', periodo_aquisitivo_inicio: '2024-03-15', periodo_aquisitivo_fim: '2025-03-14', dias_ferias_disponiveis: 30, status: 'ativo', carga_horaria: '40h', tipo_contrato: 'CLT', substitutos: ['106'] },
+    { matricula: '102', nome: 'Bruno Cesar', cargo: 'Desenvolvedor Pleno', setor: 'Tecnologia', salario_base: 7200.00, media_variaveis_mensal: 0, data_admissao: '2022-11-10', periodo_aquisitivo_inicio: '2023-11-10', periodo_aquisitivo_fim: '2024-11-09', dias_ferias_disponiveis: 30, status: 'ativo', carga_horaria: '40h', tipo_contrato: 'CLT', substitutos: ['104'] },
+    { matricula: '103', nome: 'Carla Dias', cargo: 'Analista Financeiro', setor: 'Financeiro', salario_base: 5100.00, media_variaveis_mensal: 400.00, data_admissao: '2023-01-20', periodo_aquisitivo_inicio: '2024-01-20', periodo_aquisitivo_fim: '2025-01-19', dias_ferias_disponiveis: 30, status: 'ativo', carga_horaria: '40h', tipo_contrato: 'CLT' },
+    { matricula: '104', nome: 'Daniel Alves', cargo: 'Desenvolvedor Sênior', setor: 'Tecnologia', salario_base: 9500.00, media_variaveis_mensal: 800.00, data_admissao: '2021-08-01', periodo_aquisitivo_inicio: '2023-08-01', periodo_aquisitivo_fim: '2024-08-31', dias_ferias_disponiveis: 30, status: 'ativo', carga_horaria: '40h', tipo_contrato: 'CLT', substitutos: ['102'] },
+    { matricula: '105', nome: 'Elena Santos', cargo: 'Gerente de Vendas', setor: 'Comercial', salario_base: 8000.00, media_variaveis_mensal: 1500.00, data_admissao: '2022-05-22', periodo_aquisitivo_inicio: '2023-05-22', periodo_aquisitivo_fim: '2024-05-21', dias_ferias_disponiveis: 0, status: 'ativo', carga_horaria: '44h', tipo_contrato: 'CLT' },
+    { matricula: '106', nome: 'Fernanda Lima', cargo: 'Analista de RH', setor: 'RH', salario_base: 5500.00, media_variaveis_mensal: 150.00, data_admissao: '2023-08-01', periodo_aquisitivo_inicio: '2024-08-01', periodo_aquisitivo_fim: '2025-07-31', dias_ferias_disponiveis: 30, status: 'afastado', carga_horaria: '40h', tipo_contrato: 'CLT' },
+];
+const orcamentoInicial = { "2025-01": 15000, "2025-02": 12000, "2025-03": 10000, "2025-04": 10000, "2025-05": 18000, "2025-06": 20000, "2025-07": 25000, "2025-08": 15000, "2025-09": 10000, "2025-10": 12000, "2025-11": 18000, "2025-12": 30000 };
+const configInicial = {
+    prazo_envio_opcoes: '2025-09-30',
+    datas_blackout: ['2025-12-23', '2025-12-24', '2025-12-26', '2025-12-27'],
+    reagendamentoAutomatico: false,
+    planos_ferias: [
+        { id: '30_dias', label: '30 dias de descanso', periodos: [30], abono: 0, totalDias: 30 },
+        { id: '20_10_dias', label: '20 + 10 dias de descanso', periodos: [20, 10], abono: 0, totalDias: 30 },
+        { id: '15_15_dias', label: '15 + 15 dias de descanso', periodos: [15, 15], abono: 0, totalDias: 30 },
+        { id: '20_ABONO', label: '20 dias de descanso + Vender 10 dias (Abono)', periodos: [20], abono: 10, totalDias: 30 },
+    ]
+};
+const setoresIniciais = [
+    { id: 'Marketing', limite_pessoas: 1, teto_mensal: 5000 },
+    { id: 'Tecnologia', limite_pessoas: 2, teto_mensal: 20000 },
+    { id: 'Financeiro', limite_pessoas: 1, teto_mensal: 6000 },
+    { id: 'Comercial', limite_pessoas: 1, teto_mensal: 10000 },
+    { id: 'RH', limite_pessoas: 1, teto_mensal: 7000 },
+];
+
+// --- Funções Utilitárias e de Lógica de Negócio ---
+const dateToISO = (date) => date.toISOString().split('T')[0];
+const addDays = (dateStr, days) => { const d = new Date(dateStr + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return dateToISO(d); };
+const diffDays = (d1, d2) => Math.round((new Date(d2) - new Date(d1)) / (1000*60*60*24));
+const formatCurrency = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+const today = dateToISO(new Date());
+
+const calcularCustoTotalPeriodo = (func, dias, abono=0) => {
+    if (!func) return 0;
+    const base = func.salario_base + (func.media_variaveis_mensal || 0);
+    const vFerias = (base/30) * dias;
+    const vTerco = vFerias/3;
+    const vAbono = (base/30) * (abono || 0);
+    const encargos = (vFerias*0.2) + ((vFerias+vTerco)*0.08); // Simulação simplificada de encargos
+    return vFerias + vTerco + vAbono + encargos;
+};
+
+const calcularRateioMensal = (custo, inicio, fim) => {
+    const rateio = {};
+    const dInicio = new Date(inicio + 'T00:00:00Z');
+    const dFim = new Date(fim + 'T00:00:00Z');
+    const totalDias = diffDays(inicio, fim) + 1;
+    if (totalDias <= 0) return {};
+    const custoDiario = custo / totalDias;
+    let dataCorrente = new Date(dInicio);
+    while (dataCorrente <= dFim) {
+        const mesAno = dataCorrente.toISOString().slice(0, 7);
+        if (!rateio[mesAno]) rateio[mesAno] = 0;
+        rateio[mesAno] += custoDiario;
+        dataCorrente.setUTCDate(dataCorrente.getUTCDate() + 1);
+    }
+    return rateio;
+};
+
+
+// --- Componentes de UI ---
+const Card = ({ children, className = '' }) => <div className={`bg-white rounded-lg shadow p-6 ${className}`}>{children}</div>;
+const Button = ({ children, onClick, variant='primary', className='', disabled=false }) => {
+    const styles = {
+        primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
+        secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400',
+        danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+    };
+    return <button onClick={onClick} disabled={disabled} className={`px-4 py-2 rounded-md font-semibold text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${styles[variant]} ${className}`}>{children}</button>;
+};
+const Input = ({ label, value, onChange, type = 'text', placeholder = '', disabled = false }) => (
+    <div>
+        <label className="block text-sm font-medium text-gray-700">{label}</label>
+        <input type={type} value={value} onChange={onChange} placeholder={placeholder} disabled={disabled} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100" />
+    </div>
+);
+const Modal = ({ children, onClose, size = 'lg' }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+        <div className={`bg-white rounded-lg shadow-xl p-8 max-w-${size} w-full relative`}>
+            <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            {children}
+        </div>
+    </div>
+);
+
+const NotificationModal = ({ notification, onClose }) => {
+    if (!notification) return null;
+    const { message, type } = notification;
+    
+    let icon, title, buttonVariant;
+
+    switch (type) {
+        case 'error':
+            icon = <AlertTriangleIcon className="h-10 w-10 text-red-500" />;
+            title = 'Erro na Operação';
+            buttonVariant = 'danger';
+            break;
+        case 'success':
+            icon = <CheckCircleIcon className="h-10 w-10 text-green-500" />;
+            title = 'Operação Realizada';
+            buttonVariant = 'primary';
+            break;
+        default:
+            icon = <AlertTriangleIcon className="h-10 w-10 text-blue-500" />;
+            title = 'Aviso';
+            buttonVariant = 'primary';
+    }
+
+    return (
+        <Modal onClose={onClose} size="sm">
+            <div className="flex flex-col items-center text-center">
+                {icon}
+                <h3 className="text-xl font-bold mt-4">{title}</h3>
+                <p className="text-gray-600 mt-2">{message}</p>
+                <Button onClick={onClose} variant={buttonVariant} className="mt-6 w-full">
+                    Fechar
+                </Button>
+            </div>
+        </Modal>
+    );
+}
+
+// --- Componentes de Página ---
+
+function SolicitacaoFeriasNova({ funcionario, onSave, onCancel, onShowNotification, config }) {
+    const [planoSelecionado, setPlanoSelecionado] = useState(null);
+    const [opcoesPorPeriodo, setOpcoesPorPeriodo] = useState([]);
+
+    const planosDisponiveis = useMemo(() => {
+        const todosPlanos = config.planos_ferias || [];
+        return todosPlanos.filter(p => funcionario.dias_ferias_disponiveis >= p.totalDias);
+    }, [funcionario.dias_ferias_disponiveis, config.planos_ferias]);
+
+    const handlePlanoChange = (plano) => {
+        setPlanoSelecionado(plano);
+        setOpcoesPorPeriodo(plano.periodos.map(() => ['', '', '']));
+    };
+
+    const handleDateChange = (periodoIndex, opcaoIndex, dateStr) => {
+        if (!dateStr) return;
+        if (new Date(dateStr) < new Date(today)) {
+            onShowNotification("A data de início não pode ser no passado.", 'error');
+            return;
+        }
+        const date = new Date(dateStr + 'T00:00:00Z');
+        const dayOfWeek = date.getUTCDay();
+        if ([5, 6, 0].includes(dayOfWeek)) {
+            onShowNotification("O início das férias deve ser de Segunda a Quinta-feira.", 'error');
+            return;
+        }
+        
+        const novasOpcoes = JSON.parse(JSON.stringify(opcoesPorPeriodo));
+        novasOpcoes[periodoIndex][opcaoIndex] = dateStr;
+        setOpcoesPorPeriodo(novasOpcoes);
+    };
+
+    const handleSubmit = () => {
+        if (!planoSelecionado) {
+            onShowNotification("Por favor, selecione um plano de fracionamento.", 'error');
+            return;
+        }
+        const isInvalid = opcoesPorPeriodo.some(opcoes => opcoes.filter(opt => opt !== '').length === 0);
+        if (isInvalid) {
+            onShowNotification("Por favor, preencha pelo menos uma opção de data para cada período do plano.", 'error');
+            return;
+        }
+
+        const planoParaSalvar = {
+            label: planoSelecionado.label,
+            periodos: planoSelecionado.periodos.map((dias, index) => ({
+                dias: dias,
+                opcoes_inicio: opcoesPorPeriodo[index].filter(d => d)
+            }))
+        };
+        
+        const totalDiasConsumidos = planoSelecionado.totalDias;
+
+        onSave({
+            matricula: funcionario.matricula, nomeFuncionario: funcionario.nome,
+            dias_solicitados: totalDiasConsumidos,
+            abono_dias: planoSelecionado.abono,
+            plano: planoParaSalvar,
+            status: 'Pendente Análise IA', data_solicitacao: Timestamp.now(),
+        });
+    };
+
+    return (
+        <Card>
+            <h3 className="text-xl font-bold mb-2">Solicitar Férias ({funcionario.dias_ferias_disponiveis} dias restantes)</h3>
+            
+            <div className="mb-6">
+                <h4 className="font-semibold text-gray-800 mb-2">
+                    Escolha seu plano de férias:
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                    {planosDisponiveis.map(plano => (
+                        <Button key={plano.id} variant={planoSelecionado?.id === plano.id ? 'primary' : 'secondary'}
+                            onClick={() => handlePlanoChange(plano)}>
+                            {plano.label}
+                        </Button>
+                    ))}
+                    {planosDisponiveis.length === 0 && <p className="text-gray-500">Você não tem saldo suficiente para os planos disponíveis.</p>}
+                </div>
+            </div>
+
+            {planoSelecionado && planoSelecionado.periodos.map((dias, periodoIndex) => (
+                <div key={periodoIndex} className="mb-6 p-4 border rounded-md bg-gray-50">
+                    <h4 className="font-semibold text-gray-800 mb-2">Período {periodoIndex + 1} de {dias} dias de descanso</h4>
+                    <p className="text-sm text-gray-600 mb-4">Sugira até 3 datas de início (Seg-Qui):</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[0, 1, 2].map(opcaoIndex => (
+                            <input key={opcaoIndex} type="date" min={today}
+                                   value={opcoesPorPeriodo[periodoIndex]?.[opcaoIndex] || ''}
+                                   onChange={e => handleDateChange(periodoIndex, opcaoIndex, e.target.value)}
+                                   className="w-full p-2 border rounded-md"/>
+                        ))}
+                    </div>
+                </div>
+            ))}
+
+            <div className="mt-6 flex justify-between items-center">
+                <Button onClick={handleSubmit} disabled={!planoSelecionado}>Enviar para Análise</Button>
+                <Button onClick={onCancel} variant="secondary">Cancelar</Button>
+            </div>
+        </Card>
+    );
+}
+
+function ProvisaoFinanceira({ solicitacoes, orcamentoData, funcionarios }) {
+    const [mesSelecionado, setMesSelecionado] = useState(new Date().toISOString().slice(0, 7));
+
+    const dadosProvisao = useMemo(() => {
+        const provisionado = {};
+        solicitacoes.filter(s => s.status === 'Aprovado' && s.periodo_final_aprovado).forEach(s => {
+            const func = funcionarios.find(f => f.matricula === s.matricula);
+            if (!func) return;
+
+            // Calcula o custo do abono e provisiona no primeiro dia de férias do primeiro período
+            if (s.abono_dias > 0 && s.periodo_final_aprovado.length > 0) {
+                 const custoAbono = calcularCustoTotalPeriodo(func, 0, s.abono_dias);
+                 const mesAbono = s.periodo_final_aprovado[0].inicio.slice(0, 7);
+                 if(!provisionado[mesAbono]) provisionado[mesAbono] = 0;
+                 provisionado[mesAbono] += custoAbono;
+            }
+
+            s.periodo_final_aprovado.forEach(p => {
+                const diasGozo = diffDays(p.inicio, p.fim) + 1;
+                const custoGozo = calcularCustoTotalPeriodo(func, diasGozo, 0); // Abono já tratado
+                const rateio = calcularRateioMensal(custoGozo, p.inicio, p.fim);
+                for (const [mes, valor] of Object.entries(rateio)) {
+                    if (!provisionado[mes]) provisionado[mes] = 0;
+                    provisionado[mes] += valor;
+                }
+            });
+        });
+        
+        const meses = [...new Set([...Object.keys(orcamentoData), ...Object.keys(provisionado)])].sort();
+        
+        return meses.map(mes => ({
+            mes,
+            orcado: orcamentoData[mes] || 0,
+            prov: provisionado[mes] || 0,
+        }));
+    }, [orcamentoData, solicitacoes, funcionarios]);
+
+    const detalhamentoMes = useMemo(() => {
+        return solicitacoes
+            .filter(s => s.status === 'Aprovado')
+            .map(s => {
+                const func = funcionarios.find(f => f.matricula === s.matricula);
+                let custoNoMes = 0;
+
+                if (s.abono_dias > 0 && s.periodo_final_aprovado.length > 0) {
+                    const mesAbono = s.periodo_final_aprovado[0].inicio.slice(0,7);
+                    if (mesAbono === mesSelecionado) {
+                        custoNoMes += calcularCustoTotalPeriodo(func, 0, s.abono_dias);
+                    }
+                }
+                
+                s.periodo_final_aprovado?.forEach(p => {
+                    const diasGozo = diffDays(p.inicio, p.fim) + 1;
+                    const custoGozo = calcularCustoTotalPeriodo(func, diasGozo, 0);
+                    const rateio = calcularRateioMensal(custoGozo, p.inicio, p.fim);
+                    if(rateio[mesSelecionado]) {
+                        custoNoMes += rateio[mesSelecionado];
+                    }
+                });
+
+                return { ...s, custoNoMes };
+            })
+            .filter(s => s.custoNoMes > 0);
+    }, [solicitacoes, mesSelecionado, funcionarios]);
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <h3 className="text-lg font-bold text-gray-800">Orçado vs. Provisionado</h3>
+                <div className="h-64 mt-4 bg-gray-50 p-2 rounded flex items-end gap-2">
+                    {dadosProvisao.slice(-12).map(({mes, orcado, prov}) => (
+                        <div key={mes} className="flex-1 flex flex-col items-center justify-end group cursor-pointer" onClick={() => setMesSelecionado(mes)}>
+                            <div className="text-xs text-center mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <p className="font-bold">{formatCurrency(prov)}</p>
+                                <p className="text-blue-600">{formatCurrency(orcado)}</p>
+                            </div>
+                            <div className="relative w-full h-full flex items-end">
+                                <div className="absolute bottom-0 w-full bg-blue-200" style={{height: `100%`}}></div>
+                                <div className={`absolute bottom-0 w-full ${prov > orcado ? 'bg-red-400' : 'bg-green-400'}`} style={{height: `${Math.min(100, (prov / (orcado || 1)) * 100)}%`}}></div>
+                            </div>
+                            <span className={`text-xs mt-1 font-semibold ${mes === mesSelecionado ? 'text-blue-600' : ''}`}>{mes.slice(5,7)}/{mes.slice(2,4)}</span>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+
+            <Card>
+                <h3 className="text-lg font-bold text-gray-800">Detalhamento da Provisão para {mesSelecionado}</h3>
+                 <div className="overflow-x-auto mt-4">
+                    <table className="min-w-full bg-white text-sm">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="p-3 text-left">Colaborador</th>
+                                <th className="p-3 text-left">Período de Férias</th>
+                                <th className="p-3 text-left">Custo no Mês</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                        {detalhamentoMes.map(s => (
+                             <tr key={s.id}>
+                                <td className="p-3">{s.nomeFuncionario}</td>
+                                <td className="p-3">{s.periodo_final_aprovado.map(p => `${p.inicio} a ${p.fim}`).join(', ')}</td>
+                                <td className="p-3 font-semibold">{formatCurrency(s.custoNoMes)}</td>
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+function CronogramaVisual({ solicitacoes, funcionarios, onUpdateSolicitacao }) {
+    const [data, setData] = useState(new Date());
+    const [filtroSetor, setFiltroSetor] = useState('todos');
+    const [editingEvent, setEditingEvent] = useState(null);
+
+    const handleReschedule = async (newDate) => {
+        if (!editingEvent || !newDate) return;
+        const { solicitacao, periodo, periodoIndex } = editingEvent;
+        
+        const novosPeriodos = [...solicitacao.periodo_final_aprovado];
+        const dias = diffDays(periodo.inicio, periodo.fim);
+        novosPeriodos[periodoIndex] = {
+            ...novosPeriodos[periodoIndex],
+            inicio: newDate,
+            fim: addDays(newDate, dias)
+        };
+
+        await onUpdateSolicitacao(solicitacao.id, { periodo_final_aprovado: novosPeriodos }, 'reagendamento');
+        setEditingEvent(null);
+    };
+
+    const diasNoMes = new Date(data.getFullYear(), data.getMonth() + 1, 0).getDate();
+    const primeiroDiaSemana = new Date(data.getFullYear(), data.getMonth(), 1).getDay(); // 0=Dom, 1=Seg
+    
+    const feriasDoMes = solicitacoes
+        .filter(s => s.status === 'Aprovado' && (filtroSetor === 'todos' || funcionarios.find(f => f.matricula === s.matricula)?.setor === filtroSetor))
+        .filter(s => s.periodo_final_aprovado?.some(p => p.inicio.slice(0, 7) === data.toISOString().slice(0, 7) || p.fim.slice(0, 7) === data.toISOString().slice(0, 7)));
+
+    return (
+        <Card>
+            {editingEvent && (
+                <Modal onClose={() => setEditingEvent(null)}>
+                    <h3 className="text-lg font-bold">Reagendar Férias</h3>
+                    <p>Funcionário: {editingEvent.solicitacao.nomeFuncionario}</p>
+                    <p>Período Original: {editingEvent.periodo.inicio}</p>
+                    <Input label="Nova Data de Início" type="date" onChange={(e) => handleReschedule(e.target.value)} />
+                </Modal>
+            )}
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                    <Button onClick={() => setData(new Date(data.setMonth(data.getMonth() - 1)))} variant="secondary">{"<"}</Button>
+                    <h2 className="text-xl font-bold text-center w-48">{data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</h2>
+                    <Button onClick={() => setData(new Date(data.setMonth(data.getMonth() + 1)))} variant="secondary">{">"}</Button>
+                </div>
+                <select value={filtroSetor} onChange={e => setFiltroSetor(e.target.value)} className="p-2 border rounded-md text-sm">
+                    <option value="todos">Todos os Setores</option>
+                    {[...new Set(funcionarios.map(f => f.setor))].sort().map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center font-bold text-sm text-gray-600">
+                <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+            </div>
+            <div className="grid grid-cols-7 gap-1 mt-2">
+                {Array.from({ length: primeiroDiaSemana }).map((_, i) => <div key={`empty-${i}`}></div>)}
+                {Array.from({ length: diasNoMes }).map((_, dia) => (
+                    <div key={dia} className="h-24 bg-gray-50 border rounded-md p-1 overflow-y-auto">
+                        <span className="font-semibold">{dia + 1}</span>
+                        {feriasDoMes.map(s => s.periodo_final_aprovado.map((p, pIndex) => {
+                            const diaAtual = new Date(data.getFullYear(), data.getMonth(), dia + 2);
+                            if(diaAtual >= new Date(p.inicio) && diaAtual <= new Date(p.fim + 'T23:59:59Z')) {
+                                const substituto = p.substitutoMatricula ? funcionarios.find(f => f.matricula === p.substitutoMatricula) : null;
+                                return <div key={`${s.id}-${p.inicio}`} 
+                                    onClick={() => setEditingEvent({ solicitacao: s, periodo: p, periodoIndex: pIndex })}
+                                    className="text-xs bg-blue-200 text-blue-800 rounded px-1 mt-1 truncate cursor-pointer hover:bg-blue-300">
+                                     <p className="font-semibold">{s.nomeFuncionario.split(' ')[0]}</p>
+                                     {substituto && <p className="text-[10px]">Ferista: {substituto.nome.split(' ')[0]}</p>}
+                                </div>;
+                            }
+                            return null;
+                        }))}
+                    </div>
+                ))}
+            </div>
+        </Card>
+    );
+}
+
+function ExportacaoPage({ solicitacoes, funcionarios }) {
+    const handleExport = () => {
+        const header = "matricula,nome,setor,data_inicio,data_fim,dias_gozo,abono_dias\n";
+        const rows = solicitacoes
+            .filter(s => s.status === 'Aprovado')
+            .flatMap(s => {
+                const func = funcionarios.find(f => f.matricula === s.matricula);
+                return s.periodo_final_aprovado.map(p => {
+                    const diasGozo = diffDays(p.inicio, p.fim) + 1;
+                    return [s.matricula, `"${func?.nome}"`, func?.setor, p.inicio, p.fim, diasGozo, s.abono_dias].join(',');
+                });
+            })
+            .join('\n');
+        
+        const csv = header + rows;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "cronograma_ferias.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    return (
+        <Card>
+            <h2 className="text-xl font-bold mb-4">Relatórios & Exportação</h2>
+            <Button onClick={handleExport} className="flex items-center gap-2">
+                <DownloadIcon /> Exportar Cronograma para CSV (Folha)
+            </Button>
+        </Card>
+    );
+}
+
+function LogsPage({ logs }) {
+    return (
+        <Card>
+            <h2 className="text-xl font-bold mb-4">Logs de Auditoria</h2>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+                {logs.map(log => (
+                    <div key={log.id} className="text-sm p-2 bg-gray-50 rounded">
+                        <span className="font-semibold text-blue-600">{new Date(log.timestamp?.toDate()).toLocaleString('pt-BR')}</span> - 
+                        <span className="font-bold"> {log.user}: </span> {log.action}
+                    </div>
+                ))}
+            </div>
+        </Card>
+    )
+}
+
+function DashboardFuncionario({ setPage, funcionario, solicitacoes, config, funcionarios }) {
+    const minhasSolicitacoes = solicitacoes.filter(s => s.matricula === funcionario.matricula);
+    return (
+        <div>
+            <div className="p-4 bg-blue-100 text-blue-800 rounded-lg mb-6 flex items-center gap-4">
+                <span className="font-bold">AVISO:</span>
+                <p>Você tem até o dia <span className="font-bold">{config.prazo_envio_opcoes}</span> para cadastrar suas opções de férias. Após essa data, o sistema poderá alocar suas férias automaticamente.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="md:col-span-2">
+                    <h3 className="text-xl font-bold">Minhas Férias</h3>
+                    <p className="mt-2 text-gray-600">
+                        Você tem <span className="font-bold text-blue-600 text-lg">{funcionario.dias_ferias_disponiveis}</span> dias de férias disponíveis.
+                    </p>
+                    <p className="text-sm text-gray-500">Período Aquisitivo: {funcionario.periodo_aquisitivo_inicio} a {funcionario.periodo_aquisitivo_fim}</p>
+                    <Button onClick={() => setPage('solicitarFerias')} className="mt-6" disabled={funcionario.dias_ferias_disponiveis <= 0}>Solicitar Férias</Button>
+                </Card>
+                <Card>
+                    <h3 className="text-lg font-bold">Minhas Solicitações</h3>
+                    <ul className="mt-4 space-y-3">
+                        {minhasSolicitacoes.map(s => (
+                            <li key={s.id} className="p-3 bg-gray-50 rounded-md">
+                               <div className="flex justify-between items-center">
+                                    <p className="text-sm font-semibold">{s.plano?.label || `${s.dias_solicitados} dias`}</p>
+                                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${ s.status === 'Aprovado' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }`}>{s.status}</span>
+                               </div>
+                               {s.abono_dias > 0 && <p className="text-xs text-blue-600 font-bold">Inclui Abono Pecuniário</p>}
+                               {s.periodo_final_aprovado?.map((p, idx) => {
+                                    const substituto = p.substitutoMatricula ? funcionarios.find(f => f.matricula === p.substitutoMatricula) : null;
+                                    return (
+                                        <p key={idx} className="text-xs text-gray-700 mt-1">
+                                            Período {idx+1}: {p.inicio} a {p.fim}
+                                            {substituto && <span className="font-semibold text-green-800 ml-2">(Ferista: {substituto.nome})</span>}
+                                        </p>
+                                    )
+                                })}
+                            </li>
+                        ))}
+                    </ul>
+                </Card>
+            </div>
+        </div>
+    );
+}
+
+function AprovacaoLider({ solicitacoes, onUpdateSolicitacao, onGeneratePdf, funcionarios }) {
+    const pendentes = solicitacoes.filter(s => s.status === 'Pendente Aprovação Líder');
+    const reagendados = solicitacoes.filter(s => s.status === 'Reagendado pela IA');
+    const aprovados = solicitacoes.filter(s => s.status === 'Aprovado');
+    const [simulating, setSimulating] = useState(null);
+
+    const handleSimulationChange = (newDate) => {
+        // Lógica para recalcular e mostrar impacto
+        console.log(`Simulando nova data ${newDate} para ${simulating.id}`);
+    };
+    
+    const renderPeriodos = (s) => (
+        <>
+            {s.periodo_final_aprovado?.map((p, idx) => {
+                const substituto = p.substitutoMatricula ? funcionarios.find(f => f.matricula === p.substitutoMatricula) : null;
+                return (
+                    <p key={idx} className="text-sm text-blue-700">
+                        Período {idx + 1}: {p.inicio} a {p.fim}
+                        {substituto && <span className="text-xs text-gray-600 ml-2">(Ferista: {substituto.nome})</span>}
+                    </p>
+                )
+            })}
+            {s.abono_dias > 0 && <p className="text-sm font-bold text-blue-800">+ {s.abono_dias} dias de Abono</p>}
+        </>
+    );
+
+    return (
+        <div className="space-y-6">
+            {simulating && (
+                 <Modal onClose={() => setSimulating(null)}>
+                    <h3 className="text-lg font-bold">Simulador What-if</h3>
+                    <p>Alterando férias de: <span className="font-semibold">{simulating.nomeFuncionario}</span></p>
+                    <Input label="Nova data de início" type="date" onChange={e => handleSimulationChange(e.target.value)} />
+                    <div className="mt-4 p-4 bg-yellow-100 rounded">
+                        <p className="font-bold">Impacto Financeiro (Simulado):</p>
+                        <p>Orçamento do Mês X: <span className="text-red-600">Estourado em R$ 1.234,56</span></p>
+                    </div>
+                </Modal>
+            )}
+            {reagendados.length > 0 && (
+                <Card>
+                    <h2 className="text-xl font-bold mb-4 text-purple-600">Aprovações de Reagendamento (IA)</h2>
+                    <div className="space-y-4">
+                    {reagendados.map(s => (
+                        <div key={s.id} className="p-3 bg-purple-50 rounded-md flex justify-between items-center">
+                            <div>
+                                <p className="font-semibold">{s.nomeFuncionario} ({s.plano?.label})</p>
+                                <p className="text-xs text-purple-800">IA sugere troca para 1ª opção liberada.</p>
+                                {renderPeriodos(s)}
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={() => onUpdateSolicitacao(s.id, { status: 'Aprovado' })}>Aprovar Reagendamento</Button>
+                                <Button variant="danger" onClick={() => onUpdateSolicitacao(s.id, { status: 'Aprovado' })}>Manter Original</Button>
+                            </div>
+                        </div>
+                    ))}
+                    </div>
+                </Card>
+            )}
+            <Card>
+                <h2 className="text-xl font-bold mb-4">Aprovações Finais Pendentes</h2>
+                <div className="space-y-4">
+                {pendentes.length === 0 ? <p>Nenhuma solicitação para aprovar.</p> : pendentes.map(s => (
+                    <div key={s.id} className="p-3 bg-gray-100 rounded-md flex justify-between items-center">
+                        <div>
+                            <p className="font-semibold">{s.nomeFuncionario} ({s.plano?.label})</p>
+                            {renderPeriodos(s)}
+                        </div>
+                        <div className="flex gap-2">
+                             <Button onClick={() => setSimulating(s)} variant="secondary">Simular</Button>
+                             <Button onClick={() => onUpdateSolicitacao(s.id, { status: 'Aprovado' })}>Aprovar</Button>
+                             <Button variant="danger" onClick={() => onUpdateSolicitacao(s.id, { status: 'Reprovado', periodo_final_aprovado: null })}>Reprovar</Button>
+                        </div>
+                    </div>
+                ))}
+                </div>
+            </Card>
+             <Card>
+                <h2 className="text-xl font-bold mb-4">Férias Aprovadas</h2>
+                 <div className="space-y-4">
+                {aprovados.length === 0 ? <p>Nenhuma férias aprovada.</p> : aprovados.map(s => (
+                    <div key={s.id} className="p-3 bg-green-50 rounded-md flex justify-between items-center">
+                        <div>
+                            <p className="font-semibold">{s.nomeFuncionario}</p>
+                            {renderPeriodos(s)}
+                        </div>
+                        <Button onClick={() => onGeneratePdf(s)} variant="secondary">Gerar Aviso PDF</Button>
+                    </div>
+                ))}
+                 </div>
+            </Card>
+        </div>
+    );
+}
+
+function SchedulerPage({ onRunScheduler }) {
+    const [loading, setLoading] = useState(false);
+    const [result, setResult] = useState(null);
+    const handleRun = async () => {
+        setLoading(true); setResult(null);
+        try { const res = await onRunScheduler(); setResult(res); }
+        catch(e) { setResult({ success: false, message: e.message }); }
+        setLoading(false);
+    };
+    return (
+        <Card>
+            <div className="flex items-center gap-4">
+                <BotIcon className="w-10 h-10 text-blue-600"/>
+                <div>
+                    <h2 className="text-xl font-bold">Agendador Inteligente de Férias</h2>
+                    <p className="text-gray-600">Execute o agendador para analisar as opções e criar um cronograma otimizado.</p>
+                </div>
+            </div>
+            <Button onClick={handleRun} disabled={loading} className="mt-4">{loading ? 'Processando...' : 'Executar Agendador'}</Button>
+            {result && <div className={`mt-4 p-3 rounded-md text-sm ${result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{result.message}</div>}
+        </Card>
+    );
+}
+
+function PainelRiscos({ funcionarios, solicitacoes, onDesligar }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [filtroSetor, setFiltroSetor] = useState('todos');
+    const [desligandoMatricula, setDesligandoMatricula] = useState(null);
+    const [confirmarDesligamento, setConfirmarDesligamento] = useState(null);
+
+    const handleDesligarClick = (matricula) => {
+        setConfirmarDesligamento(matricula);
+    };
+
+    const handleConfirmarDesligamento = async () => {
+        if (!confirmarDesligamento) return;
+        setDesligandoMatricula(confirmarDesligamento);
+        await onDesligar(confirmarDesligamento);
+        setDesligandoMatricula(null);
+        setConfirmarDesligamento(null);
+    };
+
+    const funcionariosComRisco = useMemo(() => {
+        return funcionarios.filter(f => f.status === 'ativo').map(f => {
+            const dataLimiteGozo = addDays(f.periodo_aquisitivo_fim, 335); // Período Concessivo (11 meses)
+            const diasParaVencer = diffDays(today, dataLimiteGozo);
+            const minhasSolicitacoes = solicitacoes.filter(s => s.matricula === f.matricula);
+            const temAgendamento = minhasSolicitacoes.some(s => s.status === 'Aprovado');
+            const temPendente = minhasSolicitacoes.some(s => s.status.startsWith('Pendente'));
+            
+            let statusRisco = 'ok';
+            let corRisco = 'bg-green-100 text-green-800';
+            if (temAgendamento) {
+                statusRisco = 'Confirmado';
+            } else if (diasParaVencer <= 60 && diasParaVencer > 0) {
+                statusRisco = 'Vencendo';
+                corRisco = 'bg-red-100 text-red-800';
+            } else if (diasParaVencer <= 0) {
+                statusRisco = 'VENCIDO';
+                corRisco = 'bg-red-700 text-white animate-pulse';
+            } else if (temPendente) {
+                statusRisco = 'Pendente';
+                corRisco = 'bg-yellow-100 text-yellow-800';
+            } else {
+                 statusRisco = 'Sem Risco';
+            }
+            return { ...f, diasParaVencer, temAgendamento, temPendente, statusRisco, corRisco };
+        }).sort((a, b) => a.diasParaVencer - b.diasParaVencer);
+    }, [funcionarios, solicitacoes]);
+
+    const setoresUnicos = [...new Set(funcionarios.map(f => f.setor))];
+    const filtrados = funcionariosComRisco.filter(f => filtroSetor === 'todos' || f.setor === filtroSetor);
+    const vencendoSemAgendamento = filtrados.filter(f => f.statusRisco === 'Vencendo' || f.statusRisco === 'VENCIDO');
+    const pendentes = filtrados.filter(f => f.statusRisco === 'Pendente');
+    const confirmados = filtrados.filter(f => f.statusRisco === 'Confirmado');
+    const semRisco = filtrados.filter(f => f.statusRisco === 'Sem Risco');
+
+    const renderFuncionarioCard = (f) => (
+        <div key={f.matricula} className="p-3 border rounded-md flex justify-between items-center">
+            <div>
+                <p className="font-semibold">{f.nome}</p>
+                <p className="text-sm text-gray-500">{f.setor} - Saldo: {f.dias_ferias_disponiveis} dias</p>
+                {(f.statusRisco === 'Vencendo' || f.statusRisco === 'VENCIDO') && <p className="text-xs text-red-600">Vence em {f.diasParaVencer} dias</p>}
+            </div>
+            <div className="flex items-center gap-2">
+                <span className={`px-2 py-1 text-xs font-bold rounded-full ${f.corRisco}`}>{f.statusRisco}</span>
+                 <button 
+                    onClick={() => handleDesligarClick(f.matricula)} 
+                    title="Registrar Desligamento" 
+                    className='p-1 rounded-full transition-colors text-red-500 hover:bg-red-100 hover:text-red-700'>
+                    <UserMinusIcon />
+                </button>
+            </div>
+        </div>
+    );
+
+    return (
+        <Card>
+             {confirmarDesligamento && (
+                <Modal onClose={() => setConfirmarDesligamento(null)}>
+                    <h3 className="text-lg font-bold">Confirmar Desligamento</h3>
+                    <p className="mt-2">Tem certeza que deseja registrar o desligamento do funcionário de matrícula {confirmarDesligamento}? Suas férias futuras agendadas serão canceladas.</p>
+                    <div className="mt-6 flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setConfirmarDesligamento(null)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="danger"
+                            onClick={handleConfirmarDesligamento}
+                            disabled={desligandoMatricula === confirmarDesligamento}
+                            className={desligandoMatricula === confirmarDesligamento ? 'animate-pulse' : ''}
+                        >
+                            {desligandoMatricula === confirmarDesligamento ? 'Processando...' : 'Confirmar Desligamento'}
+                        </Button>
+                    </div>
+                </Modal>
+            )}
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Painel de Riscos e Alertas</h2>
+                <div className="flex gap-4">
+                     <select value={filtroSetor} onChange={e => setFiltroSetor(e.target.value)} className="p-2 border rounded-md text-sm">
+                        <option value="todos">Todos os Setores</option>
+                        {setoresUnicos.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <Button onClick={() => setIsExpanded(!isExpanded)} variant="secondary">
+                        {isExpanded ? 'Ver Menos' : 'Expandir Visão'}
+                    </Button>
+                </div>
+            </div>
+            <div className="space-y-4">
+                {vencendoSemAgendamento.length > 0 && (
+                    <div>
+                        <h3 className="font-bold text-red-600 mb-2">Vencendo ou Vencido (Sem Agendamento)</h3>
+                        <div className="space-y-2">{vencendoSemAgendamento.map(renderFuncionarioCard)}</div>
+                    </div>
+                )}
+                {isExpanded && (
+                    <>
+                        {pendentes.length > 0 && <div className="mt-6"><h3 className="font-bold text-yellow-600 mb-2">Solicitações Pendentes</h3><div className="space-y-2">{pendentes.map(renderFuncionarioCard)}</div></div>}
+                        {confirmados.length > 0 && <div className="mt-6"><h3 className="font-bold text-green-600 mb-2">Férias Confirmadas</h3><div className="space-y-2">{confirmados.map(renderFuncionarioCard)}</div></div>}
+                        {semRisco.length > 0 && <div className="mt-6"><h3 className="font-bold text-gray-600 mb-2">Sem Risco Imediato</h3><div className="space-y-2">{semRisco.map(renderFuncionarioCard)}</div></div>}
+                    </>
+                )}
+                 {vencendoSemAgendamento.length === 0 && !isExpanded && <p className="text-green-700">Nenhum risco crítico de vencimento de férias encontrado!</p>}
+            </div>
+        </Card>
+    );
+}
+
+function MasterConfigPage({ config, setores, onSaveConfig, onSaveSetor, onDeleteSetor, onShowNotification }) {
+    // State for Sector Management
+    const [editingSetorId, setEditingSetorId] = useState(null);
+    const [setorNome, setSetorNome] = useState('');
+    const [setorLimite, setSetorLimite] = useState(1);
+    const [setorTeto, setSetorTeto] = useState(0);
+
+    // State for Vacation Plan Management
+    const [planoLabel, setPlanoLabel] = useState('');
+    const [planoPeriodos, setPlanoPeriodos] = useState(''); // e.g., "20,10"
+    const [planoAbono, setPlanoAbono] = useState(0);
+
+    // State for Blackout Dates
+    const [dataBlackout, setDataBlackout] = useState('');
+
+    // Sector Handlers
+    const handleEditSetor = (setor) => {
+        setEditingSetorId(setor.id);
+        setSetorNome(setor.id);
+        setSetorLimite(setor.limite_pessoas);
+        setSetorTeto(setor.teto_mensal);
+    };
+
+    const handleCancelEditSetor = () => {
+        setEditingSetorId(null);
+        setSetorNome('');
+        setSetorLimite(1);
+        setSetorTeto(0);
+    };
+
+    const handleSaveSetor = () => {
+        const idParaSalvar = editingSetorId || setorNome;
+
+        if (!idParaSalvar.trim()) {
+            onShowNotification("O nome do setor é obrigatório.", 'error');
+            return;
+        }
+
+        onSaveSetor({
+            id: idParaSalvar,
+            limite_pessoas: Number(setorLimite),
+            teto_mensal: Number(setorTeto)
+        });
+
+        handleCancelEditSetor();
+    };
+
+
+    // Vacation Plan Handlers
+    const handleAddPlano = () => {
+        if (!planoLabel || !planoPeriodos) {
+            onShowNotification("Label e Períodos são obrigatórios.", "error");
+            return;
+        }
+        const periodosArray = planoPeriodos.split(',').map(p => Number(p.trim())).filter(p => !isNaN(p) && p > 0);
+        if (periodosArray.length === 0) {
+            onShowNotification("Formato dos períodos inválido. Use números separados por vírgula (ex: 20,10).", "error");
+            return;
+        }
+        const totalDias = periodosArray.reduce((a, b) => a + b, 0) + Number(planoAbono);
+        
+        const newPlano = {
+            id: planoLabel.replace(/\s+/g, '_') + '_' + Date.now(),
+            label: planoLabel,
+            periodos: periodosArray,
+            abono: Number(planoAbono) || 0,
+            totalDias: totalDias
+        };
+
+        const updatedPlanos = [...(config.planos_ferias || []), newPlano];
+        onSaveConfig({ ...config, planos_ferias: updatedPlanos });
+
+        setPlanoLabel('');
+        setPlanoPeriodos('');
+        setPlanoAbono(0);
+    };
+
+    const handleDeletePlano = (planoId) => {
+        const updatedPlanos = (config.planos_ferias || []).filter(p => p.id !== planoId);
+        onSaveConfig({ ...config, planos_ferias: updatedPlanos });
+    };
+
+    // Blackout Dates Handlers
+    const handleAddBlackout = () => {
+        if (!dataBlackout) return;
+        const newBlackout = [...(config.datas_blackout || []), dataBlackout].sort();
+        onSaveConfig({ ...config, datas_blackout: newBlackout });
+        setDataBlackout('');
+    };
+    const handleRemoveBlackout = (dateToRemove) => {
+        const newBlackout = (config.datas_blackout || []).filter(d => d !== dateToRemove);
+        onSaveConfig({ ...config, datas_blackout: newBlackout });
+    };
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <h3 className="text-lg font-bold mb-4">Configurações da IA</h3>
+                 <div className="flex items-center">
+                    <input type="checkbox" id="reagendamento" checked={config.reagendamentoAutomatico || false} onChange={e => onSaveConfig({...config, reagendamentoAutomatico: e.target.checked})} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <label htmlFor="reagendamento" className="ml-2 block text-sm text-gray-900">Realocar vagas de desligados automaticamente (sem aprovação)</label>
+                 </div>
+            </Card>
+            <Card>
+                <h3 className="text-lg font-bold mb-4">Configuração de Setores</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-6 p-4 border rounded-md bg-gray-50">
+                    <Input label="Nome do Setor" value={setorNome} onChange={e => setSetorNome(e.target.value)} disabled={!!editingSetorId} />
+                    <Input label="Limite Pessoas" value={setorLimite} onChange={e => setSetorLimite(e.target.value)} type="number" />
+                    <Input label="Teto Mensal (Opcional)" value={setorTeto} onChange={e => setSetorTeto(e.target.value)} type="number" />
+                    <div className="flex gap-2">
+                        <Button onClick={handleSaveSetor}>{editingSetorId ? 'Salvar' : 'Adicionar'}</Button>
+                        {editingSetorId && <Button onClick={handleCancelEditSetor} variant="secondary">Cancelar</Button>}
+                    </div>
+                </div>
+                <ul className="space-y-2">
+                    {setores.map(s => (
+                        <li key={s.id} className="flex justify-between items-center p-2 bg-gray-100 rounded">
+                            <div>
+                                <span className="font-semibold">{s.id}</span>
+                                <span className="ml-4 text-sm text-gray-600">Limite: {s.limite_pessoas} | Teto: {formatCurrency(s.teto_mensal)}</span>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={() => handleEditSetor(s)} variant="secondary" className="p-2"><EditIcon /></Button>
+                                <Button onClick={() => onDeleteSetor(s.id)} variant="danger" className="p-2"><Trash2Icon /></Button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </Card>
+             <Card>
+                <h3 className="text-lg font-bold mb-4">Planos de Férias Disponíveis</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-6 p-4 border rounded-md bg-gray-50">
+                    <Input label="Label do Plano (ex: 20 + 10 dias)" value={planoLabel} onChange={e => setPlanoLabel(e.target.value)} />
+                    <Input label="Períodos (ex: 20,10)" value={planoPeriodos} onChange={e => setPlanoPeriodos(e.target.value)} />
+                    <Input label="Abono (dias)" value={planoAbono} onChange={e => setPlanoAbono(e.target.value)} type="number" />
+                    <Button onClick={handleAddPlano}>Adicionar Plano</Button>
+                </div>
+                <ul className="space-y-2">
+                    {(config.planos_ferias || []).map(p => (
+                        <li key={p.id} className="flex justify-between items-center p-2 bg-gray-100 rounded">
+                            <span>{p.label}</span>
+                            <Button onClick={() => handleDeletePlano(p.id)} variant="danger" className="p-2"><Trash2Icon /></Button>
+                        </li>
+                    ))}
+                </ul>
+            </Card>
+            <Card>
+                <h3 className="text-lg font-bold mb-4">Datas de Blackout</h3>
+                 <div className="flex gap-4 items-end mb-4">
+                    <Input label="Adicionar Data" type="date" value={dataBlackout} onChange={e => setDataBlackout(e.target.value)} />
+                    <Button onClick={handleAddBlackout}>Adicionar</Button>
+                </div>
+                <ul className="space-y-2">
+                    {(config.datas_blackout || []).map(d => (
+                        <li key={d} className="flex justify-between items-center p-2 bg-gray-100 rounded">
+                            <span>{d}</span>
+                            <Button onClick={() => handleRemoveBlackout(d)} variant="danger">Remover</Button>
+                        </li>
+                    ))}
+                </ul>
+            </Card>
+        </div>
+    );
+}
+
+function LoginPage({ onLogin }) {
+    const [userType, setUserType] = useState('master');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    return (
+        <div className="bg-gray-100 min-h-screen flex items-center justify-center">
+            <div className="w-full max-w-md">
+                <Card>
+                    <div className="text-center">
+                        <BrainCircuitIcon className="mx-auto h-12 w-auto text-blue-600"/>
+                        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+                            Facilit<span className="text-blue-600">AI</span> Férias
+                        </h2>
+                        <p className="mt-2 text-sm text-gray-600">
+                            Bem-vindo! Gestão de férias inteligente.
+                        </p>
+                    </div>
+                    
+                    <div className="mt-8 space-y-6">
+                        <Input label="E-mail / Usuário" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu.email@empresa.com" />
+                        <Input label="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="********"/>
+
+                        {/* Simulação de seleção de perfil para o protótipo */}
+                        <div className="pt-4">
+                            <label className="block text-sm font-medium text-gray-700">Simular login como:</label>
+                             <select value={userType} onChange={e => setUserType(e.target.value)} className="mt-1 block w-full p-2 border rounded-md">
+                                <option value="master">Master</option>
+                                <option value="rh">RH</option>
+                                <option value="funcionario">Funcionário</option>
+                            </select>
+                        </div>
+
+                        <div className="flex items-center justify-between text-sm">
+                            <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+                                Esqueci minha senha
+                            </a>
+                        </div>
+
+                        <Button onClick={() => onLogin(userType)} className="w-full justify-center">Entrar</Button>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+}
+
+function ImportacaoPage({ onImport, onShowNotification }) {
+    const [tipoArquivo, setTipoArquivo] = useState('funcionarios');
+    const [preview, setPreview] = useState([]);
+    const [processando, setProcessando] = useState(false);
+
+    const handleFileChange = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        setProcessando(true);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            const linhas = content.split('\n').filter(l => l.trim() !== '');
+            const cabecalho = linhas.shift().split(',').map(h => h.trim());
+            
+            const dadosProcessados = linhas.map((linha, index) => {
+                const valores = linha.split(',').map(v => v.trim());
+                const data = cabecalho.reduce((obj, key, i) => ({ ...obj, [key]: valores[i] }), {});
+                
+                let erros = [];
+                // Validações
+                if (tipoArquivo === 'funcionarios') {
+                    if (!data.matricula) erros.push("Matrícula é obrigatória.");
+                    if (!data.nome) erros.push("Nome é obrigatório.");
+                    if (!data.setor) erros.push("Setor é obrigatório.");
+                    if (!data.salario_base || isNaN(parseFloat(data.salario_base))) erros.push("Salário base inválido.");
+                    if (!data.data_admissao || !/^\d{4}-\d{2}-\d{2}$/.test(data.data_admissao)) erros.push("Data de admissão inválida (use AAAA-MM-DD).");
+                
+                    // IA: Cálculo de período aquisitivo e saldo
+                    if (erros.length === 0) {
+                        const admissao = new Date(data.data_admissao + 'T00:00:00Z');
+                        const hoje = new Date();
+                        let anoAquisitivo = admissao.getFullYear();
+                        while (new Date(anoAquisitivo + 1, admissao.getMonth(), admissao.getDate()) < hoje) {
+                            anoAquisitivo++;
+                        }
+                        data.periodo_aquisitivo_inicio = `${anoAquisitivo}-${String(admissao.getMonth()+1).padStart(2,'0')}-${String(admissao.getDate()).padStart(2,'0')}`;
+                        const fimAquisitivo = new Date(data.periodo_aquisitivo_inicio);
+                        fimAquisitivo.setFullYear(fimAquisitivo.getFullYear() + 1);
+                        fimAquisitivo.setDate(fimAquisitivo.getDate() - 1);
+                        data.periodo_aquisitivo_fim = fimAquisitivo.toISOString().slice(0,10);
+                        data.dias_ferias_disponiveis = 30; // Simplificação para novos cadastros
+                    }
+                }
+                
+                return { data, erros, isValid: erros.length === 0, linha: index + 2 };
+            });
+            setPreview(dadosProcessados);
+            setProcessando(false);
+        };
+        reader.readAsText(file);
+    };
+
+    const handleImport = () => {
+        const dadosValidos = preview.filter(p => p.isValid).map(p => p.data);
+        if(dadosValidos.length === 0) {
+            onShowNotification("Nenhum dado válido para importar.", 'error');
+            return;
+        }
+        onImport(tipoArquivo, dadosValidos);
+        setPreview([]);
+    }
+
+    return (
+        <Card>
+            <h2 className="text-xl font-bold mb-4">Importação Inteligente de Dados</h2>
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Arquivo</label>
+                <select value={tipoArquivo} onChange={e => setTipoArquivo(e.target.value)} className="p-2 border rounded-md w-full">
+                    <option value="funcionarios">Funcionários</option>
+                    <option value="setores" disabled>Setores (em breve)</option>
+                    <option value="orcamento" disabled>Orçamento (em breve)</option>
+                </select>
+            </div>
+            <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Arquivo CSV</label>
+                <input type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+            </div>
+
+            {preview.length > 0 && (
+                <div>
+                    <h3 className="font-bold mb-2">Prévia da Importação</h3>
+                    <p className="text-sm mb-4">
+                        <span className="text-green-600 font-semibold">{preview.filter(p=>p.isValid).length} linhas válidas.</span> | 
+                        <span className="text-red-600 font-semibold"> {preview.filter(p=>!p.isValid).length} linhas com erros.</span>
+                    </p>
+                    <div className="max-h-60 overflow-auto border rounded-md">
+                        <table className="min-w-full text-sm">
+                            <thead className="bg-gray-100 sticky top-0">
+                                <tr>
+                                    <th className="p-2 text-left">Linha</th>
+                                    {Object.keys(preview[0].data).map(key => <th key={key} className="p-2 text-left">{key}</th>)}
+                                    <th className="p-2 text-left">Erros</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {preview.map(item => (
+                                    <tr key={item.linha} className={!item.isValid ? 'bg-red-50' : ''}>
+                                        <td className="p-2">{item.linha}</td>
+                                        {Object.values(item.data).map((val, i) => <td key={i} className="p-2 truncate">{val}</td>)}
+                                        <td className="p-2 text-red-600 text-xs">{item.erros.join(', ')}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <Button onClick={handleImport} disabled={preview.filter(p=>p.isValid).length === 0} className="mt-4">
+                        Importar Dados Válidos
+                    </Button>
+                </div>
+            )}
+        </Card>
+    );
+}
+
+function FuncionariosPage({ funcionarios, solicitacoes, onAddFuncionario, setPage, onShowNotification, onUpdateFuncionario }) {
+    const [filtroSetor, setFiltroSetor] = useState('todos');
+    const [filtroCargo, setFiltroCargo] = useState('todos');
+    const [filtroStatus, setFiltroStatus] = useState('todos');
+    const [selectedFuncionarioModal, setSelectedFuncionarioModal] = useState(null);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [novoFuncionario, setNovoFuncionario] = useState({
+        nome: '', matricula: '', setor: '', cargo: '', data_admissao: '', salario_base: '', media_variaveis_mensal: '', carga_horaria: '', tipo_contrato: ''
+    });
+    const [substitutoToAdd, setSubstitutoToAdd] = useState('');
+
+    const handleSaveNovoFuncionario = () => {
+        if (!novoFuncionario.nome || !novoFuncionario.matricula || !novoFuncionario.data_admissao || !novoFuncionario.salario_base) {
+            onShowNotification('Nome, Matrícula, Data de Admissão e Salário Base são obrigatórios.', 'error');
+            return;
+        }
+        if (funcionarios.some(f => f.matricula === novoFuncionario.matricula)) {
+            onShowNotification('Matrícula já existe.', 'error');
+            return;
+        }
+        onAddFuncionario(novoFuncionario);
+        setIsAddModalOpen(false);
+        setNovoFuncionario({ nome: '', matricula: '', setor: '', cargo: '', data_admissao: '', salario_base: '', media_variaveis_mensal: '', carga_horaria: '', tipo_contrato: '' });
+    };
+
+    const handleAddSubstituto = () => {
+        if (!substitutoToAdd || !selectedFuncionarioModal) return;
+        const currentSubstitutos = selectedFuncionarioModal.substitutos || [];
+        if (currentSubstitutos.includes(substitutoToAdd)) {
+            onShowNotification("Este funcionário já é um substituto.", "info");
+            return;
+        }
+        const newSubstitutos = [...currentSubstitutos, substitutoToAdd];
+        onUpdateFuncionario(selectedFuncionarioModal.matricula, { substitutos: newSubstitutos });
+        setSelectedFuncionarioModal(prev => ({ ...prev, substitutos: newSubstitutos }));
+        setSubstitutoToAdd('');
+    };
+
+    const handleRemoveSubstituto = (substitutoToRemove) => {
+        if (!selectedFuncionarioModal) return;
+        const newSubstitutos = (selectedFuncionarioModal.substitutos || []).filter(s => s !== substitutoToRemove);
+        onUpdateFuncionario(selectedFuncionarioModal.matricula, { substitutos: newSubstitutos });
+        setSelectedFuncionarioModal(prev => ({ ...prev, substitutos: newSubstitutos }));
+    };
+
+    const setoresUnicos = useMemo(() => [...new Set(funcionarios.map(f => f.setor))].sort(), [funcionarios]);
+    const cargosUnicos = useMemo(() => [...new Set(funcionarios.map(f => f.cargo))].sort(), [funcionarios]);
+
+    const funcionariosFiltrados = useMemo(() => {
+        return funcionarios.filter(f => {
+            const matchSetor = filtroSetor === 'todos' || f.setor === filtroSetor;
+            const matchCargo = filtroCargo === 'todos' || f.cargo === filtroCargo;
+            const matchStatus = filtroStatus === 'todos' || f.status === filtroStatus;
+            return matchSetor && matchCargo && matchStatus;
+        });
+    }, [funcionarios, filtroSetor, filtroCargo, filtroStatus]);
+    
+    const StatusBadge = ({ status }) => {
+        const styles = {
+            ativo: 'bg-green-100 text-green-800',
+            inativo: 'bg-red-100 text-red-800',
+            afastado: 'bg-yellow-100 text-yellow-800',
+        };
+        return <span className={`px-2 py-1 text-xs font-bold rounded-full ${styles[status] || 'bg-gray-100 text-gray-800'}`}>{status}</span>;
+    };
+
+    return (
+        <Card>
+            {selectedFuncionarioModal && (
+                <Modal onClose={() => setSelectedFuncionarioModal(null)} size="2xl">
+                    <h3 className="text-xl font-bold mb-4">Detalhes do Colaborador</h3>
+                    <div className="mb-4 grid grid-cols-2 gap-4">
+                        <p><span className="font-semibold">Nome:</span> {selectedFuncionarioModal.nome}</p>
+                        <p><span className="font-semibold">Matrícula:</span> {selectedFuncionarioModal.matricula}</p>
+                        <p><span className="font-semibold">Setor:</span> {selectedFuncionarioModal.setor}</p>
+                        <p><span className="font-semibold">Cargo:</span> {selectedFuncionarioModal.cargo}</p>
+                        <p><span className="font-semibold">Admissão:</span> {selectedFuncionarioModal.data_admissao}</p>
+                        <p><span className="font-semibold">Saldo de Férias:</span> {selectedFuncionarioModal.dias_ferias_disponiveis} dias</p>
+                    </div>
+                    <div className="mt-4">
+                        <h4 className="font-bold text-gray-800 mb-2 border-b pb-1">Feristas (Substitutos)</h4>
+                        <div className="grid grid-cols-2 gap-4 items-end mb-4">
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Adicionar Substituto</label>
+                                <select value={substitutoToAdd} onChange={e => setSubstitutoToAdd(e.target.value)} className="p-2 border rounded-md w-full mt-1">
+                                    <option value="">Selecione...</option>
+                                    {funcionarios
+                                        .filter(f => f.matricula !== selectedFuncionarioModal.matricula && !(selectedFuncionarioModal.substitutos || []).includes(f.matricula))
+                                        .map(f => <option key={f.matricula} value={f.matricula}>{f.nome}</option>)}
+                                </select>
+                            </div>
+                            <Button onClick={handleAddSubstituto}>Adicionar</Button>
+                        </div>
+                        <ul className="space-y-2 max-h-40 overflow-y-auto">
+                            {(selectedFuncionarioModal.substitutos || []).map(subMatricula => {
+                                const sub = funcionarios.find(f => f.matricula === subMatricula);
+                                return (
+                                    <li key={subMatricula} className="text-sm p-2 bg-gray-50 rounded flex justify-between items-center">
+                                        <span>{sub ? sub.nome : subMatricula}</span>
+                                        <Button onClick={() => handleRemoveSubstituto(subMatricula)} variant="danger" className="p-1 h-7 w-7"><Trash2Icon /></Button>
+                                    </li>
+                                );
+                            })}
+                            {(selectedFuncionarioModal.substitutos || []).length === 0 && <p className="text-xs text-gray-500">Nenhum substituto cadastrado.</p>}
+                        </ul>
+                    </div>
+                    <div className="mt-4">
+                        <h4 className="font-bold text-gray-800 mb-2 border-b pb-1">Histórico de Férias</h4>
+                        <ul className="space-y-2 max-h-40 overflow-y-auto">
+                            {solicitacoes.filter(s => s.matricula === selectedFuncionarioModal.matricula && s.status === 'Aprovado').map(s => (
+                                <li key={s.id} className="text-sm p-2 bg-gray-50 rounded">
+                                    <p className="font-semibold">{s.plano.label}</p>
+                                    {s.periodo_final_aprovado.map((p, i) => <p key={i}>{p.inicio} a {p.fim}</p>)}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                     <div className="mt-4">
+                        <h4 className="font-bold text-gray-800 mb-2 border-b pb-1">Solicitações Atuais</h4>
+                        <ul className="space-y-2 max-h-40 overflow-y-auto">
+                             {solicitacoes.filter(s => s.matricula === selectedFuncionarioModal.matricula && s.status !== 'Aprovado' && s.status !== 'Cancelada (Desligamento)').map(s => (
+                                <li key={s.id} className="text-sm p-2 bg-yellow-50 rounded">
+                                    <div className="flex justify-between">
+                                        <p className="font-semibold">{s.plano.label}</p>
+                                        <span>{s.status}</span>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </Modal>
+            )}
+
+            {isAddModalOpen && (
+                 <Modal onClose={() => setIsAddModalOpen(false)} size="2xl">
+                    <h3 className="text-xl font-bold mb-4">Cadastrar Novo Funcionário</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Input label="Nome Completo" value={novoFuncionario.nome} onChange={e => setNovoFuncionario({...novoFuncionario, nome: e.target.value})} />
+                        <Input label="Matrícula" value={novoFuncionario.matricula} onChange={e => setNovoFuncionario({...novoFuncionario, matricula: e.target.value})} />
+                        <Input label="Setor" value={novoFuncionario.setor} onChange={e => setNovoFuncionario({...novoFuncionario, setor: e.target.value})} />
+                        <Input label="Cargo" value={novoFuncionario.cargo} onChange={e => setNovoFuncionario({...novoFuncionario, cargo: e.target.value})} />
+                        <Input label="Data de Admissão" type="date" value={novoFuncionario.data_admissao} onChange={e => setNovoFuncionario({...novoFuncionario, data_admissao: e.target.value})} />
+                        <Input label="Salário Base" type="number" value={novoFuncionario.salario_base} onChange={e => setNovoFuncionario({...novoFuncionario, salario_base: e.target.value})} />
+                        <Input label="Média Variáveis (opc)" type="number" value={novoFuncionario.media_variaveis_mensal} onChange={e => setNovoFuncionario({...novoFuncionario, media_variaveis_mensal: e.target.value})} />
+                        <Input label="Carga Horária" value={novoFuncionario.carga_horaria} onChange={e => setNovoFuncionario({...novoFuncionario, carga_horaria: e.target.value})} />
+                        <Input label="Tipo de Contrato" value={novoFuncionario.tipo_contrato} onChange={e => setNovoFuncionario({...novoFuncionario, tipo_contrato: e.target.value})} />
+                    </div>
+                    <div className="mt-6 flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSaveNovoFuncionario}>Salvar Funcionário</Button>
+                    </div>
+                 </Modal>
+            )}
+
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold">Quadro de Funcionários</h2>
+                <div className="flex gap-2">
+                    <Button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2"><UserPlusIcon /> Cadastro Individual</Button>
+                    <Button onClick={() => setPage('import')} variant="secondary" className="flex items-center gap-2"><UploadCloudIcon/> Importar em Massa</Button>
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 border rounded-md bg-gray-50">
+                 <div>
+                    <label className="text-sm font-medium text-gray-700">Setor</label>
+                    <select value={filtroSetor} onChange={e => setFiltroSetor(e.target.value)} className="p-2 border rounded-md w-full mt-1">
+                        <option value="todos">Todos</option>
+                        {setoresUnicos.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                 <div>
+                    <label className="text-sm font-medium text-gray-700">Cargo</label>
+                    <select value={filtroCargo} onChange={e => setFiltroCargo(e.target.value)} className="p-2 border rounded-md w-full mt-1">
+                        <option value="todos">Todos</option>
+                        {cargosUnicos.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+                 <div>
+                    <label className="text-sm font-medium text-gray-700">Status</label>
+                    <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="p-2 border rounded-md w-full mt-1">
+                        <option value="todos">Todos</option>
+                        <option value="ativo">Ativo</option>
+                        <option value="inativo">Inativo</option>
+                        <option value="afastado">Afastado</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                {funcionariosFiltrados.map(f => (
+                    <div key={f.matricula} onClick={() => setSelectedFuncionarioModal(f)} className="p-4 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors">
+                        <div>
+                            <p className="font-bold text-blue-600">{f.nome}</p>
+                            <p className="text-sm text-gray-600">{f.cargo} - {f.setor}</p>
+                        </div>
+                        <div className="text-right">
+                            <StatusBadge status={f.status} />
+                            <p className="text-sm mt-1">Saldo: <span className="font-semibold">{f.dias_ferias_disponiveis} dias</span></p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </Card>
+    );
+}
+
+// --- Componente Principal ---
+export default function App() {
+    const [page, setPage] = useState('home');
+    const [userType, setUserType] = useState(null); // Inicia como null
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+    
+    // Estados da aplicação
+    const [funcionarios, setFuncionarios] = useState([]);
+    const [solicitacoes, setSolicitacoes] = useState([]);
+    const [config, setConfig] = useState(configInicial);
+    const [setores, setSetores] = useState([]);
+    const [selectedFuncionario, setSelectedFuncionario] = useState(null);
+    const [logs, setLogs] = useState([]);
+    const [orcamentoData, setOrcamentoData] = useState(orcamentoInicial);
+    const [notification, setNotification] = useState(null);
+
+    const showNotification = (message, type = 'info') => {
+        setNotification({ message, type });
+    };
+
+    // --- Lógica de Autenticação e Carregamento de Dados ---
+    useEffect(() => {
+        // Adiciona o script do jsPDF dinamicamente
+        const scriptId = 'jspdf-script';
+        if (!document.getElementById(scriptId)) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+            script.async = true;
+            document.head.appendChild(script);
+        }
+
+        if (!auth) { setError("Firebase não inicializado."); setLoading(false); return; }
+        const unsubAuth = onAuthStateChanged(auth, async user => {
+            if (user) { setIsAuthReady(true); } 
+            else {
+                try {
+                    if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                    else await signInAnonymously(auth);
+                } catch (err) { setError("Falha ao autenticar."); }
+            }
+        });
+        return unsubAuth;
+    }, []);
+
+    const dataLoadedRef = React.useRef(false);
+    const seedInitialData = useCallback(async () => {
+        if (!db) return;
+        const batch = writeBatch(db);
+        const logAction = (action) => batch.set(doc(collection(db, `artifacts/${appId}/public/data/logs`)), { action, timestamp: Timestamp.now(), user: 'Sistema' });
+
+        funcionariosIniciais.forEach(f => batch.set(doc(db, `artifacts/${appId}/public/data/funcionarios`, f.matricula), f));
+        setoresIniciais.forEach(s => batch.set(doc(db, `artifacts/${appId}/public/data/setores`, s.id), s));
+        batch.set(doc(db, `artifacts/${appId}/public/data/configuracoes`, "parametros"), configInicial);
+        batch.set(doc(db, `artifacts/${appId}/public/data/orcamento`, "geral"), orcamentoInicial);
+        logAction("Dados iniciais populados no sistema.");
+        await batch.commit();
+    }, []);
+
+    useEffect(() => {
+        if (!isAuthReady || !db) return;
+        
+        const unsubConfig = onSnapshot(doc(db, `artifacts/${appId}/public/data/configuracoes`, "parametros"), (doc) => {
+            if (doc.exists()) { setConfig(doc.data()); } 
+            else if (!dataLoadedRef.current) { seedInitialData(); }
+        });
+        const unsubOrcamento = onSnapshot(doc(db, `artifacts/${appId}/public/data/orcamento`, "geral"), (doc) => {
+             if (doc.exists()) { setOrcamentoData(doc.data()); }
+        });
+        const unsubFunc = onSnapshot(collection(db, `artifacts/${appId}/public/data/funcionarios`), snap => {
+            const funcs = snap.docs.map(d => ({...d.data() }));
+            setFuncionarios(funcs);
+            if(funcs.length > 0 && !selectedFuncionario) setSelectedFuncionario(funcs[0]);
+            if(!snap.empty) dataLoadedRef.current = true;
+        });
+        const unsubSoli = onSnapshot(collection(db, `artifacts/${appId}/public/data/solicitacoes`), snap => setSolicitacoes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubSetores = onSnapshot(collection(db, `artifacts/${appId}/public/data/setores`), snap => setSetores(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const qLogs = query(collection(db, `artifacts/${appId}/public/data/logs`), orderBy('timestamp', 'desc'), limit(50));
+        const unsubLogs = onSnapshot(qLogs, snap => setLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))));
+
+        setLoading(false);
+        return () => { unsubConfig(); unsubFunc(); unsubSoli(); unsubSetores(); unsubLogs(); unsubOrcamento(); };
+    }, [isAuthReady, seedInitialData, selectedFuncionario]);
+    
+    // --- Handlers de Ações ---
+    const logAction = async (action, details = {}) => {
+        await addDoc(collection(db, `artifacts/${appId}/public/data/logs`), { action, details, timestamp: Timestamp.now(), user: userType });
+    };
+
+    const handleUpdateFuncionario = async (matricula, updates) => {
+        const funcRef = doc(db, `artifacts/${appId}/public/data/funcionarios`, matricula);
+        await updateDoc(funcRef, updates);
+        await logAction(`Dados do funcionário ${matricula} atualizados.`);
+    };
+
+    const handleAddFuncionario = async (novoFunc) => {
+        const { matricula, ...rest } = novoFunc;
+        const funcRef = doc(db, `artifacts/${appId}/public/data/funcionarios`, matricula);
+        
+        // IA Calculation
+        const admissao = new Date(novoFunc.data_admissao + 'T00:00:00Z');
+        const hoje = new Date();
+        let anoAquisitivo = admissao.getFullYear();
+        while (new Date(anoAquisitivo + 1, admissao.getMonth(), admissao.getDate()) < hoje) {
+            anoAquisitivo++;
+        }
+        const periodo_aquisitivo_inicio = `${anoAquisitivo}-${String(admissao.getMonth()+1).padStart(2,'0')}-${String(admissao.getDate()).padStart(2,'0')}`;
+        const fimAquisitivo = new Date(periodo_aquisitivo_inicio);
+        fimAquisitivo.setFullYear(fimAquisitivo.getFullYear() + 1);
+        fimAquisitivo.setDate(fimAquisitivo.getDate() - 1);
+        const periodo_aquisitivo_fim = fimAquisitivo.toISOString().slice(0,10);
+        const dias_ferias_disponiveis = 30;
+
+        const dataToSave = { 
+            ...rest, 
+            matricula,
+            status: 'ativo',
+            salario_base: parseFloat(novoFunc.salario_base) || 0,
+            media_variaveis_mensal: parseFloat(novoFunc.media_variaveis_mensal) || 0,
+            periodo_aquisitivo_inicio,
+            periodo_aquisitivo_fim,
+            dias_ferias_disponiveis
+        };
+        await setDoc(funcRef, dataToSave);
+        await logAction(`Funcionário ${novoFunc.nome} cadastrado manually.`);
+        showNotification(`Funcionário ${novoFunc.nome} cadastrado com sucesso!`, 'success');
+    };
+
+    const handleImportData = async (type, dataToImport) => {
+        if (type !== 'funcionarios') return showNotification("Importação para este tipo não implementada.", 'error');
+
+        const batch = writeBatch(db);
+        dataToImport.forEach(func => {
+            const funcRef = doc(db, `artifacts/${appId}/public/data/funcionarios`, func.matricula);
+            const dataToSave = { ...func, status: 'ativo' };
+            // Converte campos numéricos
+            dataToSave.salario_base = parseFloat(dataToSave.salario_base) || 0;
+            dataToSave.media_variaveis_mensal = parseFloat(dataToSave.media_variaveis_mensal) || 0;
+            batch.set(funcRef, dataToSave);
+        });
+        await batch.commit();
+        await logAction(`Importou ${dataToImport.length} funcionários via CSV.`);
+        showNotification(`${dataToImport.length} funcionários importados com sucesso!`, 'success');
+    };
+
+    const handleSaveConfig = async (newConfig) => {
+        await setDoc(doc(db, `artifacts/${appId}/public/data/configuracoes`, "parametros"), newConfig, { merge: true });
+        await logAction("Configurações gerais atualizadas.");
+    };
+    const handleSaveSetor = async (setor) => {
+        await setDoc(doc(db, `artifacts/${appId}/public/data/setores`, setor.id), setor);
+        await logAction(`Setor '${setor.id}' salvo/atualizado.`);
+    };
+    const handleDeleteSetor = async (id) => {
+        await deleteDoc(doc(db, `artifacts/${appId}/public/data/setores`, id));
+        await logAction(`Setor '${id}' removido.`);
+    };
+    const handleSaveSolicitacao = async (data) => {
+        await addDoc(collection(db, `artifacts/${appId}/public/data/solicitacoes`), data);
+        await logAction(`Nova solicitação de férias para ${data.nomeFuncionario}.`);
+        showNotification('Sua solicitação foi enviada para análise da IA.', 'success');
+        setPage('home');
+    };
+    
+    const handleUpdateSolicitacao = async (id, updates, motivo = 'update') => {
+        const solicitacaoRef = doc(db, `artifacts/${appId}/public/data/solicitacoes`, id);
+        const solicitacao = solicitacoes.find(s => s.id === id);
+        if (!solicitacao) return showNotification("Erro: Solicitação não encontrada.", 'error');
+        
+        if (updates.status === 'Aprovado') {
+            const funcionario = funcionarios.find(f => f.matricula === solicitacao.matricula);
+            if (!funcionario) return showNotification("Erro: Funcionário não encontrado.", 'error');
+            
+            const diasSolicitados = solicitacao.dias_solicitados;
+            const novosDiasDisponiveis = funcionario.dias_ferias_disponiveis - diasSolicitados;
+            if (novosDiasDisponiveis < 0) return showNotification(`Erro: Saldo de férias insuficiente para ${funcionario.nome}.`, 'error');
+
+            const batch = writeBatch(db);
+            batch.update(solicitacaoRef, updates);
+            batch.update(doc(db, `artifacts/${appId}/public/data/funcionarios`, funcionario.matricula), { dias_ferias_disponiveis: novosDiasDisponiveis });
+            await batch.commit();
+            await logAction(`Solicitação de ${funcionario.nome} APROVADA.`);
+        } else if (motivo === 'reagendamento') {
+             await updateDoc(solicitacaoRef, updates);
+             await logAction(`Férias de ${solicitacao.nomeFuncionario} reagendada.`);
+        }
+        else {
+            await setDoc(solicitacaoRef, updates, { merge: true });
+            await logAction(`Solicitação ${solicitacao.nomeFuncionario} atualizada para ${updates.status}.`);
+        }
+    };
+
+    const handleRunScheduler = async () => {
+        const pendentesQuery = query(collection(db, `artifacts/${appId}/public/data/solicitacoes`), where("status", "==", "Pendente Análise IA"));
+        const pendentesSnap = await getDocs(pendentesQuery);
+        const pendentes = pendentesSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        const funcionariosMap = funcionarios.reduce((acc, f) => ({...acc, [f.matricula]: f}), {});
+
+        pendentes.sort((a,b) => {
+            const funcA = funcionariosMap[a.matricula];
+            const funcB = funcionariosMap[b.matricula];
+            if (!funcA || !funcB) return 0;
+            const vencimentoA = diffDays(today, addDays(funcA.periodo_aquisitivo_fim, 335));
+            const vencimentoB = diffDays(today, addDays(funcB.periodo_aquisitivo_fim, 335));
+            if (vencimentoA !== vencimentoB) return vencimentoA - vencimentoB;
+            return new Date(funcA.data_admissao) - new Date(funcB.data_admissao);
+        });
+        
+        let agendadosCount = 0;
+        const batch = writeBatch(db);
+        const feriasAprovadas = solicitacoes.filter(s => s.status === 'Aprovado');
+        const feriasAgendadasNestaRodada = [];
+
+        for (const s of pendentes) {
+            if (!s.plano || !s.plano.periodos) continue;
+            
+            let melhoresOpcoes = [];
+            let falha = false;
+            const func = funcionarios.find(f => f.matricula === s.matricula);
+            if (!func) continue;
+
+            for (const periodo of s.plano.periodos) {
+                let melhorOpcao = null;
+                let menorScore = Infinity;
+
+                for (const inicio of periodo.opcoes_inicio) {
+                    let score = 0;
+                    const fim = addDays(inicio, periodo.dias - 1);
+                    
+                    if (config.datas_blackout?.some(d => d >= inicio && d <= fim)) {
+                        score = Infinity;
+                        continue;
+                    }
+
+                    const setorInfo = setores.find(set => set.id === func.setor);
+                    const limiteSetor = setorInfo?.limite_pessoas ?? 1;
+                    
+                    let colisoes = feriasAprovadas
+                        .filter(fa => funcionarios.find(f => f.matricula === fa.matricula)?.setor === func.setor)
+                        .filter(fa => fa.periodo_final_aprovado.some(p => inicio <= p.fim && fim >= p.inicio))
+                        .length;
+
+                    colisoes += feriasAgendadasNestaRodada
+                        .filter(fa => fa.setor === func.setor)
+                        .filter(fa => fa.periodos.some(p => inicio <= p.fim && fim >= p.inicio))
+                        .length;
+                    
+                    if(colisoes >= limiteSetor) {
+                        score = Infinity;
+                    }
+
+                    // --- NEW: Ferista/Substituto check ---
+                    let substitutoDisponivel = null;
+                    const potenciaisSubstitutos = func.substitutos || [];
+
+                    for (const subMatricula of potenciaisSubstitutos) {
+                        let isSubstitutoOcupado = false;
+                        
+                        // Check against already approved vacations (as main person or substitute)
+                        for (const fa of feriasAprovadas) {
+                           if (fa.periodo_final_aprovado.some(p => (fa.matricula === subMatricula || p.substitutoMatricula === subMatricula) && inicio <= p.fim && fim >= p.inicio)) {
+                                isSubstitutoOcupado = true;
+                                break;
+                           }
+                        }
+                        if (isSubstitutoOcupado) continue;
+
+                        // Check against vacations scheduled in this run (as main person or substitute)
+                        for (const fa of feriasAgendadasNestaRodada) {
+                            if (fa.periodos.some(p => (fa.matricula === subMatricula || p.substitutoMatricula === subMatricula) && inicio <= p.fim && fim >= p.inicio)) {
+                                isSubstitutoOcupado = true;
+                                break;
+                            }
+                        }
+                        if (isSubstitutoOcupado) continue;
+
+                        // If not busy, we found our substitute
+                        substitutoDisponivel = subMatricula;
+                        break;
+                    }
+
+                    if (!substitutoDisponivel && potenciaisSubstitutos.length > 0) {
+                        score = Infinity; 
+                    }
+
+
+                    if (score < menorScore) {
+                        menorScore = score;
+                        melhorOpcao = { inicio, fim, substitutoMatricula: substitutoDisponivel };
+                    }
+                }
+                
+                if (melhorOpcao) {
+                    melhoresOpcoes.push(melhorOpcao);
+                } else {
+                    falha = true;
+                    break;
+                }
+            }
+            
+            if (!falha) {
+                batch.update(doc(db, `artifacts/${appId}/public/data/solicitacoes`, s.id), {
+                    status: 'Pendente Aprovação Líder',
+                    periodo_final_aprovado: melhoresOpcoes,
+                });
+                agendadosCount++;
+                feriasAgendadasNestaRodada.push({
+                    matricula: func.matricula,
+                    setor: func.setor,
+                    periodos: melhoresOpcoes
+                });
+            } else {
+                 batch.update(doc(db, `artifacts/${appId}/public/data/solicitacoes`, s.id), { status: 'Requer Ação Manual' });
+            }
+        }
+        await batch.commit();
+        await logAction(`Agendador IA executado. ${agendadosCount} solicitações pré-agendadas.`);
+        return { success: true, message: `${agendadosCount} solicitações foram pré-agendadas.` };
+    };
+
+    const handleGeneratePdf = (solicitacao) => {
+        if (typeof window.jspdf === 'undefined') {
+            showNotification("A biblioteca para gerar PDF ainda está carregando. Por favor, tente novamente em um momento.", 'info');
+            return;
+        }
+        const { jsPDF } = window.jspdf;
+        const funcionario = funcionarios.find(f => f.matricula === solicitacao.matricula);
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text("AVISO DE FÉRIAS", 105, 20, { align: 'center' });
+        doc.setFontSize(12);
+        doc.text(`Prezado(a) ${funcionario.nome},`, 20, 40);
+        doc.text(`Matrícula: ${funcionario.matricula}`, 20, 50);
+        doc.text(`Setor: ${funcionario.setor}`, 20, 60);
+        doc.text(`Comunicamos que suas férias foram programadas conforme abaixo:`, 20, 80);
+        
+        let yPos = 90;
+        solicitacao.periodo_final_aprovado.forEach((p, idx) => {
+            const periodoDias = diffDays(p.inicio, p.fim) + 1;
+            doc.text(`Período ${idx+1}: ${p.inicio} a ${p.fim} (${periodoDias} dias de gozo)`, 20, yPos);
+            yPos += 10;
+        });
+        
+        if (solicitacao.abono_dias > 0) {
+            doc.text(`Adicionalmente, foi aprovada a conversão de ${solicitacao.abono_dias} dias em abono pecuniário.`, 20, yPos);
+            yPos += 10;
+        }
+
+        doc.text(`Total de dias debitados do saldo: ${solicitacao.dias_solicitados}`, 20, yPos + 10);
+        doc.text(`São Paulo, ${new Date().toLocaleDateString('pt-BR')}.`, 20, yPos + 40);
+        doc.save(`aviso_ferias_${funcionario.matricula}.pdf`);
+        logAction(`Gerado PDF de aviso de férias para ${funcionario.nome}.`);
+    };
+
+    const handleDesligamento = async (matricula) => {
+        const batch = writeBatch(db);
+        const funcRef = doc(db, `artifacts/${appId}/public/data/funcionarios`, matricula);
+        batch.update(funcRef, { status: 'inativo' });
+        
+        const feriasCanceladas = [];
+        solicitacoes
+            .filter(s => s.matricula === matricula && s.status === 'Aprovado' && s.periodo_final_aprovado?.[0]?.inicio >= today)
+            .forEach(s => {
+                const solRef = doc(db, `artifacts/${appId}/public/data/solicitacoes`, s.id);
+                batch.update(solRef, { status: 'Cancelada (Desligamento)' });
+                feriasCanceladas.push(...s.periodo_final_aprovado);
+            });
+        
+        await batch.commit();
+        await logAction(`Funcionário ${matricula} desligado.`);
+        
+        // Dispara o reaproveitamento se houver vagas
+        if(feriasCanceladas.length > 0) {
+            handleReaproveitamentoVaga(feriasCanceladas);
+        }
+    };
+
+    const handleReaproveitamentoVaga = async (vagasLiberadas) => {
+        console.log("Vagas liberadas para reaproveitamento:", vagasLiberadas);
+        // Lógica para encontrar candidatos e reagendar...
+    }
+
+    // --- Renderização ---
+    if (!userType) {
+        return <LoginPage onLogin={(type) => setUserType(type)} />;
+    }
+
+    const renderPage = () => {
+        if (loading) return <div>Carregando...</div>;
+        if (error) return <div className="text-red-500 p-4">{error}</div>;
+
+        if (userType === 'funcionario') {
+            const func = selectedFuncionario || funcionarios.find(f=>f.status === 'ativo');
+            if (!func) return <p>Selecione um funcionário para simular.</p>;
+            switch(page) {
+                case 'home': return <DashboardFuncionario setPage={setPage} funcionario={func} solicitacoes={solicitacoes} config={config} funcionarios={funcionarios} />;
+                case 'solicitarFerias': return <SolicitacaoFeriasNova config={config} funcionario={func} onSave={handleSaveSolicitacao} onCancel={() => setPage('home')} onShowNotification={showNotification} />;
+                default: setPage('home'); return null;
+            }
+        }
+        
+        switch(page) {
+            case 'home': return <AprovacaoLider solicitacoes={solicitacoes} onUpdateSolicitacao={handleUpdateSolicitacao} onGeneratePdf={handleGeneratePdf} funcionarios={funcionarios}/>;
+            case 'scheduler': return <SchedulerPage onRunScheduler={handleRunScheduler} />;
+            case 'cronograma': return <CronogramaVisual solicitacoes={solicitacoes} funcionarios={funcionarios} onUpdateSolicitacao={handleUpdateSolicitacao} />;
+            case 'funcionarios': return <FuncionariosPage funcionarios={funcionarios} solicitacoes={solicitacoes} onAddFuncionario={handleAddFuncionario} setPage={setPage} onShowNotification={showNotification} onUpdateFuncionario={handleUpdateFuncionario} />;
+            case 'riscos': return <PainelRiscos funcionarios={funcionarios} solicitacoes={solicitacoes} onDesligar={handleDesligamento} />;
+            case 'provisao': return <ProvisaoFinanceira solicitacoes={solicitacoes} orcamentoData={orcamentoData} funcionarios={funcionarios} />;
+            case 'import': return userType === 'master' ? <ImportacaoPage onImport={handleImportData} onShowNotification={showNotification}/> : <p>Acesso negado.</p>;
+            case 'export': return <ExportacaoPage solicitacoes={solicitacoes} funcionarios={funcionarios} />;
+            case 'logs': return <LogsPage logs={logs} />;
+            case 'config': return userType === 'master' ? <MasterConfigPage config={config} setores={setores} onSaveConfig={handleSaveConfig} onSaveSetor={handleSaveSetor} onDeleteSetor={handleDeleteSetor} onShowNotification={showNotification}/> : <p>Acesso negado.</p>;
+            default: setPage('home'); return null;
+        }
+    };
+    
+    const navLinks = [
+        { key: 'home', label: 'Aprovações', icon: <CheckCircleIcon className="w-5 h-5"/>, roles: ['rh', 'master'] },
+        { key: 'scheduler', label: 'Agendador IA', icon: <BotIcon />, roles: ['rh', 'master'] },
+        { key: 'cronograma', label: 'Cronograma Visual', icon: <CalendarIcon />, roles: ['rh', 'master'] },
+        { key: 'funcionarios', label: 'Funcionários', icon: <UsersIcon />, roles: ['rh', 'master'] },
+        { key: 'riscos', label: 'Painel de Riscos', icon: <AlertTriangleIcon />, roles: ['rh', 'master'] },
+        { key: 'provisao', label: 'Provisão Financeira', icon: <PieChartIcon />, roles: ['rh', 'master'] },
+        { key: 'import', label: 'Importação', icon: <UploadCloudIcon />, roles: ['master'] },
+        { key: 'export', label: 'Relatórios', icon: <DownloadIcon />, roles: ['rh', 'master'] },
+        { key: 'logs', label: 'Logs de Auditoria', icon: <FileTextIcon />, roles: ['rh', 'master'] },
+        { key: 'config', label: 'Parâmetros', icon: <SettingsIcon />, roles: ['master'] },
+    ];
+
+    return (
+        <div className="bg-gray-100 min-h-screen font-sans text-gray-900">
+            <NotificationModal notification={notification} onClose={() => setNotification(null)} />
+            <header className="bg-white shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <BrainCircuitIcon className="h-8 w-auto text-blue-600"/>
+                        <h1 className="text-2xl font-bold text-gray-800">Facilit<span className="text-blue-600">AI</span> Férias</h1>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <select value={userType} onChange={e => { setUserType(e.target.value); setPage('home'); }} className="p-2 border rounded-md">
+                            <option value="master">Master</option>
+                            <option value="rh">RH</option>
+                            <option value="funcionario">Funcionário</option>
+                        </select>
+                        {userType === 'funcionario' && (
+                            <select value={selectedFuncionario?.matricula || ''} onChange={e => setSelectedFuncionario(funcionarios.find(f => f.matricula === e.target.value))} className="p-2 border rounded-md text-sm">
+                                <option value="">Selecione...</option>
+                                {funcionarios.filter(f => f.status === 'ativo').map(f => <option key={f.matricula} value={f.matricula}>{f.nome}</option>)}
+                            </select>
+                        )}
+                        <Button onClick={() => setUserType(null)} variant="secondary">Sair</Button>
+                    </div>
+                </div>
+            </header>
+            
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-8">
+                {userType !== 'funcionario' && (
+                    <aside className="w-1/4">
+                        <nav className="space-y-2">
+                            {navLinks.filter(l => l.roles.includes(userType)).map(link => (
+                                <button key={link.key} onClick={() => setPage(link.key)} 
+                                    className={`w-full flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-md transition-colors ${page === link.key ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+                                    {link.icon}
+                                    {link.label}
+                                </button>
+                            ))}
+                        </nav>
+                    </aside>
+                )}
+                <main className={userType !== 'funcionario' ? 'w-3/4' : 'w-full'}>
+                    {renderPage()}
+                </main>
+            </div>
+        </div>
+    );
+}
+
